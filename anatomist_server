@@ -1,0 +1,24 @@
+#!/bin/bash
+cd /home/myuser/CASE
+CONTAINER_PYTHON=${1:-/opt/brainvisa/bin/python}
+CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
+
+echo ${DOCKERID}; export DISPLAY=:1;
+
+${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} -b 2>&1 |tee ~/.vnc/out_anatomist_server &
+
+sleep 2
+i=0
+while [ true ]; do
+    sleep 1
+    pgrep -fla ".*ana_dispatcher.py -b"
+    RET=$?
+    if [ $RET -eq 0 ]; then
+	break
+    elif [ $i -gt 100 ]; then
+	break
+    fi
+    i=$((i+1))
+done
+
+exit $RET

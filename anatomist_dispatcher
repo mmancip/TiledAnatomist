@@ -1,0 +1,27 @@
+#!/bin/bash
+cd /home/myuser/CASE
+NUM_ANA=${1:-2}
+CONTAINER_PYTHON=${2:-/opt/brainvisa/bin/python}
+CONTAINER_ANA_DISPATCHER=${3:-/home/myuser/CASE/ana_dispatcher.py}
+START_ANA_DISPATCH=${4:-/home/myuser/CASE/start_ana_dispatch.py}
+CASE_DATA_CONFIG=${5:-/home/myuser/CASE/case_data_config.json}
+DATA_PATH_DOCKER=${6:-/braindatas/database_learnclean}
+
+${CONTAINER_PYTHON} ${START_ANA_DISPATCH} -n ${NUM_ANA} -d ${DATA_PATH_DOCKER} -a ${CONTAINER_ANA_DISPATCHER} -c ${CASE_DATA_CONFIG} 2>&1 |tee ~/.vnc/out_dispatcher &
+
+i=0
+while [ true ]; do
+    grep 'dispatcher done\.' ~/.vnc/out_dispatcher
+    OutDispatcher=$?
+
+    if [ ${OutDispatcher} -gt 0 ]; then
+	break
+    elif [ $i -gt 100 ]; then
+	RET=${OutDispatcher}
+	break
+    fi
+    sleep 1
+    i=$((i+1))
+done
+echo "dispatcher done."
+exit $OutDispatcher

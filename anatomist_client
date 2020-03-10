@@ -1,0 +1,29 @@
+#!/bin/bash
+cd /home/myuser/CASE
+CONTAINER_PYTHON=${1:-/opt/brainvisa/bin/python}
+CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
+MASTERIP=${3:-11.0.0.11}
+IS_ATLAS=${4:-false}
+
+echo ${DOCKERID}; export DISPLAY=:1;
+if ( ! ${IS_ATLAS} ); then
+    OUT=~/.vnc/out_ana
+    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${DOCKERID} --url ${MASTERIP} 2>&1 |tee ${OUT} &
+else
+    OUT=~/.vnc/out_ana_atlas
+    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-atlas --url ${MASTERIP} 2>&1 |tee ${OUT} &
+fi
+
+i=0
+while [ true ]; do
+    sleep 1
+    grep 'ana_dispatcher ready\.' ${OUT}
+    RET=$?
+    if [ $RET -eq 0 ]; then
+	break
+    elif [ $i -gt 100 ]; then
+	break
+    fi
+    i=$((i+1))
+done
+exit $RET

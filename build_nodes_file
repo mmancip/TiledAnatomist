@@ -1,0 +1,82 @@
+#!/bin/bash 
+
+CASE_NAME=UNKNOWN
+NOVNC_URL='http://mycuster/kanaka-noVNC-33e1462/vnc_auto.html'
+CASE_DATA_CONFIG="case_data_config.json"
+
+FILEPATH=./list_dockers_pass
+
+NUM=$( wc -l ${FILEPATH}| sed -e "s}^\([0-9]*\).*}\1}" )
+
+
+# NUMCOL=$( grep '"maxColumnNumber" : ' $PWD/config.js |sed -e 's&.*"maxColumnNumber" : \([0-9]*\),.*&\1&' )
+# spreadX=$( grep '"X" : ' config.js | sed -e 's&.*"X" : \([0-9]*\),*\ *.*&\1&' )
+# spreadY=$( grep '"Y" : ' config.js | sed -e 's&.*"Y" : \([0-9]*\),*\ *.*&\1&' )
+# LARGE=$(( 1920 * 4 ))
+# TOTX=$(( (110 * spreadX * NUMCOL ) / 100 ))
+# NumY=$(( (110 * spreadY * LARGE ) / ( TOTX * 100 ) ))
+# HIGH=$(( 1080 * 4 ))
+# NUMLINE=$(( HIGH / NumY ))
+# #echo "number of Columns :" $NUMCOL " number of Lines " $NUMLINE
+# NUMCOL2=$(( NUMCOL / 2 ))
+# NUMLINE2=$(( NUMLINE / 2 ))
+# #echo "number of 1/2 Columns :" $NUMCOL2 " number of 1/2 Lines " $NUMLINE2
+
+function min {
+   ( [ $1 -le $2 ] && echo $1 ) || ( [ $2 -lt $1 ] && echo $2 ) 
+}
+
+DATE=$(date +%F_%H-%M-%S)
+
+echo '{ "nodes": [' > nodes.json
+#echo 'echo '' >> nodes.json' >> nodes.json
+i=0
+while IFS='' read -r line || [[ -n "$line" ]]; do
+  if [ X"${line}" == X"" ]; then  
+      echo "error too old passord file."
+      rm -f nodes.json
+      exit 2
+  fi
+
+  i2=$((2*(i+1)))
+  i0=$(printf "%03d" $((i+1)))
+  thishost=${line% *}
+  pass=${line##* }
+  #echo ${i} ${i2} ${pass}
+
+  if [ $i -gt 0 ]; then
+      echo '},' >> nodes.json
+  fi
+  echo '{"title" : "ANATOMIST '$i0'",' >> nodes.json
+  echo ' "variable" : "ID-'$i0'" ,' >> nodes.json
+
+  URL=$(echo $NOVNC_URL | envsubst) # expand envars in $NOVNC_URL
+  echo ' "url" : "'${URL}'?host='${HTTP_FRONTEND}'&port='${SOCKETdomain}${i0}'&encrypt=0&password='${pass}'&true_color=1",' >> nodes.json
+  echo ' "comment" : "Comment for node '$i' from '${thishost}'",' >> nodes.json
+  echo ' "usersNotes"  : "This is node '$i' : Docker host '${thishost}' and noVNC server '${URL}'",' >> nodes.json
+
+  tags='"Todo"'
+  if [ $(( i + 1 )) -eq ${NUM} ]; then
+      tags=${tags}',"atlas"'
+  fi
+  if [ $i -eq 0 ]; then
+      tags='"master"'
+  fi
+  tags=${tags}',"'${thishost}'"'
+  echo ' "tags"  : ['${tags}']' >> nodes.json
+
+  i=$(( i + 1 ))
+done < list_dockers_pass
+echo '}' >> nodes.json
+echo '] }' >> nodes.json
+
+echo "var text_ = " > nodes.js
+cat nodes.json >> nodes.js
+echo 'var jsDataTab = text_.nodes;' >> nodes.js
+
+# allow to import customized tags
+if [ -f ./patch_nodes_file_with_data.py ]; then
+  python ../patch_nodes_file_with_data.py -d "${CASE_DATA_CONFIG}"
+fi
+
+exit 0
