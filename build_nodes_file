@@ -4,6 +4,21 @@ CASE_NAME=UNKNOWN
 NOVNC_URL='http://mycuster/kanaka-noVNC-33e1462/vnc_auto.html'
 CASE_DATA_CONFIG="case_data_config.json"
 
+CASE_SCRIPT=$(realpath ${1:-case_config.ini})
+SITE_SCRIPT=$(realpath ${2:-site_config.ini})
+
+# get case-specifig config paths (overriding defaults)
+if [ -f "${CASE_SCRIPT}" ]; then
+  sed -e "s@\[CASE\]@#!/bin/bash@" "${CASE_SCRIPT}" > case_config
+  . case_config
+fi
+
+# get site-specifig config paths (overriding defaults)
+if [ -f "${SITE_SCRIPT}" ]; then
+  sed -e "s@\[SITE\]@#!/bin/bash@" "${SITE_SCRIPT}" > site_config
+  . site_config
+fi
+
 FILEPATH=./list_dockers_pass
 
 NUM=$( wc -l ${FILEPATH}| sed -e "s}^\([0-9]*\).*}\1}" )
