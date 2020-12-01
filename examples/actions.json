@@ -1,0 +1,5 @@
+{"action1":["launch_smallsize","tab"],
+ "action2":["launch_bigsize","picture_in_picture"],
+ "action3":["fullscreenApp","all_out"]
+ "action4":["showGUI","settings"]
+}

@@ -6,6 +6,7 @@ CASE_DATA_CONFIG="case_data_config.json"
 
 CASE_SCRIPT=$(realpath ${1:-case_config.ini})
 SITE_SCRIPT=$(realpath ${2:-site_config.ini})
+TileSet=${3:-defaulTS}
 
 # get case-specifig config paths (overriding defaults)
 if [ -f "${CASE_SCRIPT}" ]; then
@@ -62,7 +63,7 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
   if [ $i -gt 0 ]; then
       echo '},' >> nodes.json
   fi
-  echo '{"title" : "ANATOMIST '$i0'",' >> nodes.json
+  echo '{"title" : "'$i0'",' >> nodes.json
   echo ' "variable" : "ID-'$i0'" ,' >> nodes.json
 
   URL=$(echo $NOVNC_URL | envsubst) # expand envars in $NOVNC_URL
@@ -70,7 +71,7 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
   echo ' "comment" : "Comment for node '$i' from '${thishost}'",' >> nodes.json
   echo ' "usersNotes"  : "This is node '$i' : Docker host '${thishost}' and noVNC server '${URL}'",' >> nodes.json
 
-  tags='"Todo"'
+  tags="\"$TileSet\""
   if [ $(( i + 1 )) -eq ${NUM} ]; then
       tags=${tags}',"atlas"'
   fi
