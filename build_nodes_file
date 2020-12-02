@@ -92,7 +92,7 @@ echo 'var jsDataTab = text_.nodes;' >> nodes.js
 
 # allow to import customized tags
 if [ -f ./patch_nodes_file_with_data.py ]; then
-  python ../patch_nodes_file_with_data.py -d "${CASE_DATA_CONFIG}"
+  python ./patch_nodes_file_with_data.py -d "${CASE_DATA_CONFIG}"
 fi
 
 exit 0
