@@ -6,12 +6,14 @@ import sys,os,time
 import code
 import argparse
 import re, datetime
+import json
 
 SITE_config='./site_config.ini'
 CASE_config="./case_config.ini"
 
 actions_file=open("/home/myuser/actions.json",'r')
 tiles_actions=json.load(actions_file)
+#launch_actions()
 
 config = configparser.ConfigParser()
 config.optionxform = str
@@ -82,15 +84,15 @@ client.send_server(CreateTS)
 ExecuteTS='execute TS='+TileSet+" "
 # Launch a command on the frontend
 LaunchTS='launch TS='+TileSet+" "+JOBPath+' '
-LaunchTSC='launch TS='+TileSet+" "+CASEdir+' '
 
 # Build ANATOMIST dir
-client.send_server(LaunchTS+" mkdir "+CASE)
-print("Out of mkdir %s : %s" % (CASE, str(client.get_OK())))
-CASEdir=os.path.join(JOBPath,CASE)
+# client.send_server(LaunchTS+" mkdir "+CASE)
+# print("Out of mkdir %s : %s" % (CASE, str(client.get_OK())))
+#CASEdir=os.path.join(JOBPath,CASE)
+#LaunchTSC='launch TS='+TileSet+" "+CASEdir+' '
 
 # get TiledAnatomist package from Github
-COMMAND_GIT="git clone https://github.com/mmancip/TiledAnatomist.git ANATOMIST"
+COMMAND_GIT="git clone https://github.com/mmancip/TiledAnatomist.git"
 print("command_git : "+COMMAND_GIT)
 os.system(COMMAND_GIT)
 
@@ -98,29 +100,13 @@ os.system(COMMAND_GIT)
 try:
     client.send_server(LaunchTS+' chmod og-rxw '+JOBPath)
     print("Out of chmod JOBPath : "+ str(client.get_OK()))
-    
-    send_file_server(client,TileSet,"ANATOMIST","anatomist_server",JOBPath)
-    send_file_server(client,TileSet,"ANATOMIST","anatomist_client",JOBPath)
-    send_file_server(client,TileSet,"ANATOMIST","anatomist_dispatcher",JOBPath)
-    send_file_server(client,TileSet,"ANATOMIST","build_nodes_file", JOBPath)
-    send_file_server(client,TileSet,"ANATOMIST",START_ANA_DISPATCH,JOBPath)
-    send_file_server(client,TileSet,"ANATOMIST",CONTAINER_ANA_DISPATCHER,JOBPath)
 
-    ANATOMISTicons=os.path.join(JOBPath,"icons")
-    client.send_server(LaunchTS+" mkdir icons")
-    print("Out of mkdir %s : %s" % (ANATOMISTicons, str(client.get_OK())))
-
-    for (dirpath, dirname, filelist) in os.walk("ANATOMIST/icons"):
-        for filename in filelist:
-            print("Send %s to icons" % (str(filename)))        
-            send_file_server(client,TileSet,"ANATOMIST/icons",filename,ANATOMISTicons)
-
-    send_file_server(client,TileSet,".", CASE_config, CASEdir)
-    CASE_config=os.path.join(CASEdir,CASE_config)
+    send_file_server(client,TileSet,".", CASE_config, JOBPath)
+    CASE_config=os.path.join(JOBPath,CASE_config)
     send_file_server(client,TileSet,".", SITE_config, JOBPath)
     SITE_config=os.path.join(JOBPath,os.path.basename(SITE_config))
-    send_file_server(client,TileSet,".", os.path.basename(CASE_DATA_CONFIG), CASEdir)
-    send_file_server(client,TileSet,".", "list_hostsgpu", CASEdir)
+    send_file_server(client,TileSet,".", os.path.basename(CASE_DATA_CONFIG), JOBPath)
+    send_file_server(client,TileSet,".", "list_hostsgpu", JOBPath)
 
 except:
     print("Error sending files !")
@@ -135,29 +121,37 @@ COMMAND_TiledAnatomist=LaunchTS+COMMAND_GIT
 client.send_server(COMMAND_TiledAnatomist)
 print("Out of git clone TiledAnatomist : "+ str(client.get_OK()))
 
-# COMMAND_copy=LaunchTS+"cp -r TiledAnatomist .... "+\
-#                "./"
+COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/anatomist_server "+\
+               "TiledAnatomist/anatomist_client "+\
+               "TiledAnatomist/anatomist_dispatcher "+\
+               "TiledAnatomist/patch_nodes_file_with_data.py "+\
+               "TiledAnatomist/build_nodes_file "+\
+               "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
+               "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
+               "TiledAnatomist/icons "+\
+               "./"
 
-# client.send_server(COMMAND_copy)
-# print("Out of copy scripts from TiledCourse : "+ str(client.get_OK()))
+client.send_server(COMMAND_copy)
+print("Out of copy scripts from TiledCourse : "+ str(client.get_OK()))
 
 # Launch containers HERE
 REF_CAS=str(NUM_DOCKERS)+" "+DATE+" "+DOCKERSPACE_DIR+" "+DOCKER_NAME
 
 print("\nREF_CAS : "+REF_CAS)
 
-COMMANDStop=os.path.join(TILEDOCKERS_path,"stop_dockers")+" "+REF_CAS+" "+os.path.join(CASEdir,GPU_FILE)
+COMMANDStop=os.path.join(TILEDOCKERS_path,"stop_dockers")+" "+REF_CAS+" "+os.path.join(JOBPath,GPU_FILE)
 print("\n"+COMMANDStop)
 sys.stdout.flush()
 
 # Launch dockers
 def Run_dockers():
-    COMMAND=os.path.join(TILEDOCKERS_path,"launch_dockers")+" "+REF_CAS+" "+GPU_FILE+" "+HTTP_FRONTEND+":"+HTTP_IP+\
-             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS
+    COMMAND="bash -vx -c \""+os.path.join(TILEDOCKERS_path,"launch_dockers")+" "+REF_CAS+" "+GPU_FILE+" "+HTTP_FRONTEND+":"+HTTP_IP+\
+             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
+             " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
 
     print("\nCommand dockers : "+COMMAND)
 
-    client.send_server(LaunchTSC+' '+COMMAND)
+    client.send_server(LaunchTS+' '+COMMAND)
     print("Out of launch dockers : "+ str(client.get_OK()))
     sys.stdout.flush()
 
@@ -167,21 +161,20 @@ sys.stdout.flush()
 # Build nodes.json file from new dockers list
 def build_nodes_file():
     print("Build nodes.json file from new dockers list.")
-    COMMAND=LaunchTS+' chmod u+x build_nodes_file '
-    client.send_server(COMMAND)
-    print("Out of chmod build_nodes_file : "+ str(client.get_OK()))
+    # COMMAND=LaunchTS+' chmod u+x build_nodes_file '
+    # client.send_server(COMMAND)
+    # print("Out of chmod build_nodes_file : "+ str(client.get_OK()))
 
-    COMMAND=LaunchTS+' ./build_nodes_file '+os.path.join(CASEdir,CASE_config)+' '+os.path.join(CASEdir,SITE_config)+' '+TileSet
+    COMMAND=LaunchTS+' ./build_nodes_file '+os.path.join(JOBPath,CASE_config)+' '+os.path.join(JOBPath,SITE_config)+' '+TileSet
     print("\nCommand dockers : "+COMMAND)
 
     client.send_server(COMMAND)
     print("Out of build_nodes_file : "+ str(client.get_OK()))
     time.sleep(2)
-    launch_nodes_json()
 
 build_nodes_file()
 sys.stdout.flush()
-#get_file_client(client,TileSet,CASEdir,"nodes.json",".")
+#get_file_client(client,TileSet,JOBPath,"nodes.json",".")
     
 time.sleep(2)
 # Launch docker tools
@@ -192,10 +185,21 @@ def launch_resize(RESOL="1300x520"):
 launch_resize()
 
 def launch_tunnel():
-    client.send_server(ExecuteTS+' /opt/tunnel_ssh '+SOCKETdomain+' '+HTTP_FRONTEND+' '+HTTP_LOGIN)
+    # Call tunnel for VNC
+    client.send_server(ExecuteTS+' /opt/tunnel_ssh '+HTTP_FRONTEND+' '+HTTP_LOGIN)
     print("Out of tunnel_ssh : "+ str(client.get_OK()))
+    # Get back PORT
+    for i in range(NUM_DOCKERS):
+        i0="%0.3d" % (i+1)
+        client.send_server(ExecuteTS+' Tiles=('+containerId(i+1)+') '+
+                           'bash -c "cat .vnc/port |xargs -I @ sed -e \"s#port='+SOCKETdomain+i0+'#port=@#\" -i CASE/nodes.json"')
+        print("Out of change port %s : " % (i0) + str(client.get_OK()))
+
+    sys.stdout.flush()
+    launch_nodes_json()
 
 launch_tunnel()
+sys.stdout.flush()
 
 def launch_vnc():
     client.send_server(ExecuteTS+' /opt/vnccommand')
@@ -209,14 +213,35 @@ def init_wmctrl():
 
 init_wmctrl()
 
-def Run_dispatcher():
+def Run_server():
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
                        CASE_DOCKER_PATH+'anatomist_server '+
                        CONTAINER_PYTHON+' '+
-                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER)
+                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER)    
     print("Out of anatomist_server : "+ str(client.get_OK()))
+        
+Run_server()
 
-Run_dispatcher()
+def Get_server_IP():
+    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
+                       'bash -c "/usr/local/bin/get_ip.sh; cp .vnc/myip CASE/serverip"')
+    #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
+    print("Out of get ip : "+ str(client.get_OK()))
+    get_file_client(client,TileSet,JOBPath,"serverip",".")
+    # while( get_file_client(client,TileSet,JOBPath,"serverip",".") < 0):
+    #     time.sleep(1)
+    #     pass
+    try:
+        with open("serverip",'r') as fserverip:
+            init_IP=fserverip.read().replace(domain+'.',"").replace("\n","")
+            print("Server ip : "+domain+'.'+init_IP)
+    except:
+        print("Cannot retreive server ip.")        
+        pass
+    return init_IP
+    sys.stdout.flush()
+
+init_IP=Get_server_IP()
 
 List_anatomist=range(2,NUM_ANA+1)
     
@@ -238,13 +263,14 @@ def Run_clients():
             break
         arglist=list(map(containerId, sublist))
         #print(str(arglist))
-
-        client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+
-                           CASE_DOCKER_PATH+'anatomist_client '+
-                           CONTAINER_PYTHON+' '+
-                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
-                           domain+"."+init_IP)
+        COMMANDclient= CASE_DOCKER_PATH+'anatomist_client '+CONTAINER_PYTHON+' '+\
+                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+\
+                       domain+"."+init_IP
+        sys.stdout.flush()
+        print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
+        client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
         print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
+        sys.stdout.flush()
 
         # client.send_server(bExecuteTS+' '+
         #     CASE_DOCKER_PATH+'anatomist_client '+
@@ -259,23 +285,39 @@ def Run_clients():
                            CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
                            domain+"."+init_IP+' true' )
         print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
+        sys.stdout.flush()
 
 Run_clients()
-sys.stdout.flush()
 
 
 # execute synchrone ?
-def Run_server():
-    COMMAND_SERVER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
+def Run_dispatcher():
+    COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
                     ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
                     ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_DOCKER
-    print("COMMAND_SERVER : "+COMMAND_SERVER)
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+COMMAND_SERVER)
+    print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
+    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
     print("Out of anatomist_dispatcher : "+str(client.get_OK()))
 
-Run_server()
+Run_dispatcher()
 sys.stdout.flush()
+
+
+def clear_vnc(tileNum=-1,tileId='001'):
+    if ( tileNum > -1 ):
+        TilesStr=' Tiles=('+containerId(tileNum+1)+') '
+    else:
+        TilesStr=' Tiles=('+tileId+') '
+    client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
+    print("Out of clear-vnc : "+ str(client.get_OK()))
+
+def clear_vnc_all():
+    for i in List_anatomist:
+        clear_vnc(i-1)
+        #clear_vnc(tileId=containerId(i))
+
+clear_vnc_all()
 
 def launch_changesize(RESOL="1920x1080",tileNum=-1,tileId='001'):
     if ( tileNum > -1 ):
@@ -317,14 +359,12 @@ def showGUI(tileNum=-1,tileId='001'):
 def kill_all_containers():
     client.send_server(ExecuteTS+' killall Xvnc')
     print("Out of killall command : "+ str(client.get_OK()))
-
     client.send_server(LaunchTS+" "+COMMANDStop)
-
     client.close()
     
 
 launch_actions_and_interact()
-        
+
 kill_all_containers()
     
 sys.exit(0)
