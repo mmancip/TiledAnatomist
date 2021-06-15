@@ -8,6 +8,9 @@ import argparse
 import re, datetime
 import json
 
+if (os.path.exists("config.tar")):
+    os.system("tar xf config.tar")
+
 SITE_config='./site_config.ini'
 CASE_config="./case_config.ini"
 
@@ -195,6 +198,7 @@ def launch_tunnel():
                            'bash -c "cat .vnc/port |xargs -I @ sed -e \"s#port='+SOCKETdomain+i0+'#port=@#\" -i CASE/nodes.json"')
         print("Out of change port %s : " % (i0) + str(client.get_OK()))
 
+    time.sleep(2)
     sys.stdout.flush()
     launch_nodes_json()
 
