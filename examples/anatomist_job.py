@@ -23,15 +23,19 @@ config.optionxform = str
 
 config.read(SITE_config)
 
-TILEDOCKERS_path=config['SITE']['TILEDOCKER_DIR']
-DOCKERSPACE_DIR=config['SITE']['DOCKERSPACE_DIR']
+TILEDVIZ_DIR=config['SITE']['TILEDVIZ_DIR']
+TILESINGULARITYS_DIR=os.path.join(TILEDVIZ_DIR,"TVConnections/Singularity")
+TilesScriptsPath=TILESINGULARITYS_DIR
+SPACE_DIR=config['SITE']['SPACE_DIR']
 #NOVNC_URL=config['SITE']['NOVNC_URL']
 GPU_FILE=config['SITE']['GPU_FILE']
 
-HTTP_FRONTEND=config['SITE']['HTTP_FRONTEND']
-HTTP_LOGIN=config['SITE']['HTTP_LOGIN']
-HTTP_IP=config['SITE']['HTTP_IP']
-init_IP=config['SITE']['init_IP']
+SSH_FRONTEND=config['SITE']['SSH_FRONTEND']
+SSH_LOGIN=config['SITE']['SSH_LOGIN']
+SSH_IP=config['SITE']['SSH_IP']
+
+SSL_PUBLIC=config['SITE']['SSL_PUBLIC']
+SSL_PRIVATE=config['SITE']['SSL_PRIVATE']
 
 config.read(CASE_config)
 
@@ -47,11 +51,11 @@ domain=config['CASE']['domain']
 OPTIONssh=config['CASE']['OPTIONssh']
 SOCKETdomain=config['CASE']['SOCKETdomain']
 
-DOCKER_NAME=config['CASE']['DOCKER_NAME']
+SINGULARITY_NAME=config['CASE']['SINGULARITY_NAME']
 
 DATA_PATH=config['CASE']['DATA_PATH']
-DATA_MOUNT_DOCKER=config['CASE']['DATA_MOUNT_DOCKER']
-DATA_PATH_DOCKER=config['CASE']['DATA_PATH_DOCKER']
+DATA_MOUNT_SINGULARITY=config['CASE']['DATA_MOUNT_SINGULARITY']
+DATA_PATH_SINGULARITY=config['CASE']['DATA_PATH_SINGULARITY']
 HAVE_ATLAS=bool(int(config['CASE']['HAVE_ATLAS'].replace('\"','')))
 CASE_DATA_CONFIG=config['CASE']['CASE_DATA_CONFIG']
 
@@ -61,15 +65,10 @@ CONTAINER_ANA_DISPATCHER=config['CASE']['CONTAINER_ANA_DISPATCHER']
 
 OPTIONS=config['CASE']['OPTIONS'].replace("$","").replace('"','')
 print("\nOPTIONS from CASE_CONFIG : "+OPTIONS)
-def replaceconf(x):
-    if (re.search('}',x)):
-        varname=x.replace("{","").replace("}","")
-        return config['CASE'][varname]
-    else:
-        return x
 OPTIONS=OPTIONS.replace("JOBPath",JOBPath)
 OPTIONS=OPTIONS.replace('{','|{').replace('}','}|').split('|')
 OPTIONS="".join(list(map( replaceconf,OPTIONS)))
+print("OPTIONS after replacement : "+OPTIONS)
 
 if HAVE_ATLAS:
     NUM_ANA=NUM_DOCKERS-1
@@ -80,7 +79,6 @@ NumMaxClient=NUM_ANA-1
 CreateTS='create TS='+TileSet+' Nb='+str(NUM_DOCKERS)
 
 client.send_server(CreateTS)
-
 
 # Global commands
 # Execute on each/a set of tiles
@@ -135,102 +133,115 @@ COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/anatomist_server "+\
                "./"
 
 client.send_server(COMMAND_copy)
-print("Out of copy scripts from TiledCourse : "+ str(client.get_OK()))
+print("Out of copy scripts from TiledAnatomist : "+ str(client.get_OK()))
 
 # Launch containers HERE
-REF_CAS=str(NUM_DOCKERS)+" "+DATE+" "+DOCKERSPACE_DIR+" "+DOCKER_NAME
+REF_CAS=str(NUM_DOCKERS)+" "+DATE+" "+SPACE_DIR+" "+SINGULARITY_NAME
 
 print("\nREF_CAS : "+REF_CAS)
 
-COMMANDStop=os.path.join(TILEDOCKERS_path,"stop_dockers")+" "+REF_CAS+" "+os.path.join(JOBPath,GPU_FILE)
+COMMANDStop=os.path.join(TILESINGULARITYS_DIR,"stop_singularitys")+" "+REF_CAS+" "+os.path.join(JOBPath,GPU_FILE)
 print("\n"+COMMANDStop)
 sys.stdout.flush()
 
-# Launch dockers
-def Run_dockers():
-    COMMAND="bash -vx -c \""+os.path.join(TILEDOCKERS_path,"launch_dockers")+" "+REF_CAS+" "+GPU_FILE+" "+HTTP_FRONTEND+":"+HTTP_IP+\
-             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
+# Launch singularitys
+def Run_singularitys():
+    COMMAND="bash -c \""+os.path.join(TILESINGULARITYS_DIR,"launch_singularitys")+" "+REF_CAS+" "+GPU_FILE+" "+SSH_FRONTEND+":"+SSH_IP+" "+TILEDVIZ_DIR+" "+TILESINGULARITYS_DIR+\
+             " TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
              " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
+#             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
 
-    print("\nCommand dockers : "+COMMAND)
-
+    logging.warning("\nCommand singularitys : "+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
-    print("Out of launch dockers : "+ str(client.get_OK()))
+    state=client.get_OK()
+    logging.warning("Out of launch singularity : "+ str(state))
     sys.stdout.flush()
+    stateVM=(state == 0)
+    return stateVM
 
-Run_dockers()
-sys.stdout.flush()
+try:
+    stateVM=Run_singularitys()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
 
-# Build nodes.json file from new dockers list
-def build_nodes_file():
-    print("Build nodes.json file from new dockers list.")
-    # COMMAND=LaunchTS+' chmod u+x build_nodes_file '
-    # client.send_server(COMMAND)
-    # print("Out of chmod build_nodes_file : "+ str(client.get_OK()))
 
-    COMMAND=LaunchTS+' ./build_nodes_file '+os.path.join(JOBPath,CASE_config)+' '+os.path.join(JOBPath,SITE_config)+' '+TileSet
-    print("\nCommand dockers : "+COMMAND)
-
-    client.send_server(COMMAND)
-    print("Out of build_nodes_file : "+ str(client.get_OK()))
-    time.sleep(2)
-
-build_nodes_file()
-sys.stdout.flush()
-#get_file_client(client,TileSet,JOBPath,"nodes.json",".")
     
-time.sleep(2)
-# Launch docker tools
-def launch_resize(RESOL="1300x520"):
-    client.send_server(ExecuteTS+' xrandr --fb '+RESOL)
-    print("Out of xrandr : "+ str(client.get_OK()))
-
-launch_resize()
-
-def launch_tunnel():
-    # Call tunnel for VNC
-    client.send_server(ExecuteTS+' /opt/tunnel_ssh '+HTTP_FRONTEND+' '+HTTP_LOGIN)
-    print("Out of tunnel_ssh : "+ str(client.get_OK()))
-    # Get back PORT
-    for i in range(NUM_DOCKERS):
-        i0="%0.3d" % (i+1)
-        client.send_server(ExecuteTS+' Tiles=('+containerId(i+1)+') '+
-                           'bash -c "cat .vnc/port |xargs -I @ sed -e \"s#port='+SOCKETdomain+i0+'#port=@#\" -i CASE/nodes.json"')
-        print("Out of change port %s : " % (i0) + str(client.get_OK()))
-
-    time.sleep(2)
+try:
+    if (stateVM):
+        build_nodes_file()
     sys.stdout.flush()
-    launch_nodes_json()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
 
-launch_tunnel()
-sys.stdout.flush()
 
-def launch_vnc():
-    client.send_server(ExecuteTS+' /opt/vnccommand')
-    print("Out of vnccommand : "+ str(client.get_OK()))
+time.sleep(2)
+# Launch singularity tools
+if (stateVM):
+    all_resize("1920x1080")
 
-launch_vnc()
 
-def init_wmctrl():
-    client.send_server(ExecuteTS+' wmctrl -l -G')
-    print("Out of wmctrl : "+ str(client.get_OK()))
+try:
+    if (stateVM):
+        stateVM=launch_tunnel()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+print("after launch tunnel servers %r" % (stateVM))
 
-init_wmctrl()
+try:
+    nodesf=open("nodes.json",'r')
+    nodes=json.load(nodesf)
+    nodesf.close()
+except:
+    print("nodes.json doesn't exists !")
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+
+print("after read nodes.json %r" % (stateVM))
+
+try:
+    if (stateVM):
+        stateVM=launch_vnc()
+except:
+    print("Problem when launch vnc !")
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+
+print("after launch vnc servers %r" % (stateVM))
+
 
 def Run_server():
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       CASE_DOCKER_PATH+'anatomist_server '+
+                       os.path.join(CASE_DOCKER_PATH,'anatomist_server')+' '+
                        CONTAINER_PYTHON+' '+
-                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER)    
+                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER))
     print("Out of anatomist_server : "+ str(client.get_OK()))
-        
-Run_server()
+    sys.stdout.flush()
+2024-01-06 22:34:50,529 - Server - Thread-56 - WARNING: Execute command "Tiles=(001) /home/mmancip/TileVizCases/TiledANATOMIST/Singularityanatomist_server /casa/install/bin/python /home/mmancip/TileVizCases/TiledANATOMIST/Singularityana_dispatcher.py" on tileset ANATOMSingu on list ['001']
+
+try:
+    if (stateVM):
+        Run_server()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
 
 def Get_server_IP():
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       'bash -c "/usr/local/bin/get_ip.sh; cp .vnc/myip CASE/serverip"')
+                       'bash -c "'+os.path.join(TILEDVIZ_DIR,'TVConnections/get_ip.sh')+'; cp .vnc/myip CASE/serverip"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
     print("Out of get ip : "+ str(client.get_OK()))
+    sys.stdout.flush()
     get_file_client(client,TileSet,JOBPath,"serverip",".")
     # while( get_file_client(client,TileSet,JOBPath,"serverip",".") < 0):
     #     time.sleep(1)
@@ -239,13 +250,22 @@ def Get_server_IP():
         with open("serverip",'r') as fserverip:
             init_IP=fserverip.read().replace(domain+'.',"").replace("\n","")
             print("Server ip : "+domain+'.'+init_IP)
+            sys.stdout.flush()
     except:
         print("Cannot retreive server ip.")        
+        sys.stdout.flush()
+        init_IP="1.1.1.1"
         pass
     return init_IP
     sys.stdout.flush()
 
-init_IP=Get_server_IP()
+try:
+    if (stateVM):
+        init_IP=Get_server_IP()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
 
 List_anatomist=range(2,NUM_ANA+1)
     
@@ -267,8 +287,9 @@ def Run_clients():
             break
         arglist=list(map(containerId, sublist))
         #print(str(arglist))
-        COMMANDclient= CASE_DOCKER_PATH+'anatomist_client '+CONTAINER_PYTHON+' '+\
-                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+\
+        COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
+                       CONTAINER_PYTHON+' '+\
+                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
                        domain+"."+init_IP
         sys.stdout.flush()
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
@@ -284,44 +305,66 @@ def Run_clients():
         
     if HAVE_ATLAS:
         client.send_server(ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+
-                           CASE_DOCKER_PATH+'anatomist_client '+
+                           os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+
                            CONTAINER_PYTHON+' '+
-                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
+                           os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+
                            domain+"."+init_IP+' true' )
         print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
         sys.stdout.flush()
 
-Run_clients()
+try:
+    if (stateVM):
+        Run_clients()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
 
 
 # execute synchrone ?
 def Run_dispatcher():
-    COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
-                    ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
-                    ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
-                    ' '+DATA_PATH_DOCKER
+    COMMAND_DISPATCHER=os.path.join(CASE_DOCKER_PATH,'anatomist_dispatcher')+str(NUM_ANA)+' '+\
+                       CONTAINER_PYTHON+' '+\
+                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                       os.path.join(CASE_DOCKER_PATH,START_ANA_DISPATCH)+' '+\
+                       os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
+                    ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
     print("Out of anatomist_dispatcher : "+str(client.get_OK()))
 
-Run_dispatcher()
-sys.stdout.flush()
+try:
+    if (stateVM):
+        Run_dispatcher()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
 
 
-def clear_vnc(tileNum=-1,tileId='001'):
-    if ( tileNum > -1 ):
-        TilesStr=' Tiles=('+containerId(tileNum+1)+') '
-    else:
-        TilesStr=' Tiles=('+tileId+') '
-    client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
-    print("Out of clear-vnc : "+ str(client.get_OK()))
+if (stateVM):
+    init_wmctrl()
 
-def clear_vnc_all():
-    for i in List_anatomist:
-        clear_vnc(i-1)
-        #clear_vnc(tileId=containerId(i))
+# def clear_vnc(tileNum=-1,tileId='001'):
+#     if ( tileNum > -1 ):
+#         TilesStr=' Tiles=('+containerId(tileNum+1)+') '
+#     else:
+#         TilesStr=' Tiles=('+tileId+') '
+#     client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
+#     print("Out of clear-vnc : "+ str(client.get_OK()))
 
-clear_vnc_all()
+# def clear_vnc_all():
+#     for i in List_anatomist:
+#         clear_vnc(i-1)
+#         #clear_vnc(tileId=containerId(i))
+
+
+try:
+    if (stateVM):
+        clear_vnc_all()
+except:
+    traceback.print_exc(file=sys.stdout)
+
 
 def launch_changesize(RESOL="1920x1080",tileNum=-1,tileId='001'):
     if ( tileNum > -1 ):
@@ -342,7 +385,7 @@ def launch_bigsize(tileNum=-1,tileId='001'):
     launch_changesize(tileNum=tileNum,RESOL="2000x800")
 
 def fullscreenApp(tileNum=-1,tileId='001'):
-    COMMAND='/opt/movewindows subject: -b toggle,fullscreen'
+    COMMAND=os.path.join(TILESINGULARITYS_DIR,"movewindows")+' subject: -b toggle,fullscreen'
     if ( tileNum > -1 ):
         TilesStr=' Tiles=('+containerId(tileNum+1)+') '            
     else:
@@ -351,7 +394,7 @@ def fullscreenApp(tileNum=-1,tileId='001'):
     client.get_OK()
 
 def showGUI(tileNum=-1,tileId='001'):
-    COMMAND='/opt/movewindows Anatomist -b toggle,above'
+    COMMAND=os.path.join(TILESINGULARITYS_DIR,"movewindows")+' Anatomist -b toggle,above'
     if ( tileNum > -1 ):
         TilesStr=' Tiles=('+containerId(tileNum+1)+') '            
     else:
@@ -361,13 +404,26 @@ def showGUI(tileNum=-1,tileId='001'):
 
 
 def kill_all_containers():
-    client.send_server(ExecuteTS+' killall Xvnc')
-    print("Out of killall command : "+ str(client.get_OK()))
+    stateVM=True
+    client.send_server(ExecuteTS+' killall -9 Xvfb')
+    state=client.get_OK()
+    print("Out of killall command : "+ str(state))
     client.send_server(LaunchTS+" "+COMMANDStop)
-    client.close()
+    state=client.get_OK()
+    print("Out of COMMANDStop : "+ str(state))
+    stateVM=(state == 0)
+    time.sleep(2)
+    Remove_TileSet()
+    return stateVM
     
 
+#isActions=True
 launch_actions_and_interact()
+
+try:
+    print("isActions: "+str(isActions))
+except:
+    print("isActions not defined.")
 
 kill_all_containers()
     
@@ -375,14 +431,14 @@ sys.exit(0)
 
 for i in List_anatomist:
     client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+
-                       '/opt/movewindows  subject: -b remove,maximized_vert,maximized_horz')
+                       os.path.join(TILESINGULARITYS_DIR,"movewindows")+' subject: -b remove,maximized_vert,maximized_horz')
     client.get_OK()
 
 
 
 for i in List_anatomist:
     client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+
-                       '/opt/movewindows  subject: -b add,fullscreen')
+                       os.path.join(TILESINGULARITYS_DIR,"movewindows")+' subject: -b add,fullscreen')
     client.get_OK()
 
 

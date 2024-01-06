@@ -5,10 +5,11 @@ CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
 MASTERIP=${3:-11.0.0.11}
 IS_ATLAS=${4:-false}
 
-echo ${DOCKERID}; export DISPLAY=:1;
+echo ${SINGULARITYID}; #export DISPLAY=:1;
+export DISPLAY=$(pgrep -fa Xvfb | sed -e "s&.*:\([0-9]*\) .*&:\1&")
 if ( ! ${IS_ATLAS} ); then
     OUT=~/.vnc/out_ana
-    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${DOCKERID} --url ${MASTERIP} 2>&1 |tee ${OUT} &
+    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${SINGULARIYID} --url ${MASTERIP} 2>&1 |tee ${OUT} &
 else
     OUT=~/.vnc/out_ana_atlas
     ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-atlas --url ${MASTERIP} 2>&1 |tee ${OUT} &

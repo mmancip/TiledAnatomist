@@ -3,7 +3,8 @@ cd /home/myuser/CASE
 CONTAINER_PYTHON=${1:-/opt/brainvisa/bin/python}
 CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
 
-echo ${DOCKERID}; export DISPLAY=:1;
+echo ${SINGULARITYID}; #export DISPLAY=:1;
+export DISPLAY=$(pgrep -fa Xvfb | sed -e "s&.*:\([0-9]*\) .*&:\1&")
 
 ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} -b 2>&1 |tee ~/.vnc/out_anatomist_server &
 
