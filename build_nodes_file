@@ -71,7 +71,7 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
   echo ' "variable" : "ID-'$i0'" ,' >> nodes.json
 
   URL=$(echo $NOVNC_URL | envsubst) # expand envars in $NOVNC_URL
-  echo ' "url" : "'${URL}'?host='${HTTP_FRONTEND}'&port='${SOCKETdomain}${i0}'&encrypt=1&password='${pass}'&true_color=1",' >> nodes.json
+  echo ' "url" : "'${URL}'?autoconnect=1&host='${HTTP_FRONTEND}'&port='${SOCKETdomain}${i0}'&encrypt=1&password='${pass}'&true_color=1",' >> nodes.json
   echo ' "comment" : "Comment for node '$i' from '${thishost}'",' >> nodes.json
   echo ' "usersNotes"  : "This is node '$i' : Docker host '${thishost}' and noVNC server '${URL}'",' >> nodes.json
 
