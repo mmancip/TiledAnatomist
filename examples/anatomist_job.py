@@ -226,7 +226,6 @@ def Run_server():
                        os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER))
     print("Out of anatomist_server : "+ str(client.get_OK()))
     sys.stdout.flush()
-2024-01-06 22:34:50,529 - Server - Thread-56 - WARNING: Execute command "Tiles=(001) /home/mmancip/TileVizCases/TiledANATOMIST/Singularityanatomist_server /casa/install/bin/python /home/mmancip/TileVizCases/TiledANATOMIST/Singularityana_dispatcher.py" on tileset ANATOMSingu on list ['001']
 
 try:
     if (stateVM):
