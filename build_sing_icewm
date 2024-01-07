@@ -1,0 +1,15 @@
+#!/bin/bash
+
+export brainvisa=/tmpdir/$USER/brainvisa-$1
+
+sudo singularity build --sandbox $brainvisa ~/BrainVISA/brainvisa-$1.sif
+sudo singularity exec --writable $brainvisa bash -c 'sed -e "s&\# deb-src &deb-src &" -i /etc/apt/sources.list; cat /etc/apt/sources.list'
+sudo singularity exec --writable $brainvisa apt-get update
+sudo singularity exec --writable $brainvisa bash -c 'LC_ALL=C; apt-get install -y --fix-missing xvfb xterm wmctrl icewm git rsync python3-pip iproute2 x11-xserver-utils  mesa-utils'
+sudo singularity exec --writable $brainvisa bash -c 'LC_ALL=C; apt-get build-dep -y --fix-missing x11vnc'
+sudo singularity exec --writable $brainvisa bash -c 'cd /usr/src && git clone https://github.com/LibVNC/x11vnc.git; cd x11vnc && autoreconf -fiv && ./configure && make install'
+
+sudo mount -t tmpfs tmpfs /tmp
+sudo singularity build brainvisa-$1_icewm.sif $brainvisa
+sudo umount /tmp
+
