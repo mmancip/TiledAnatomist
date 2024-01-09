@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import zmq
 import traceback
-import cPickle as pickle
+import pickle
 import threading
 import sys
 import argparse
