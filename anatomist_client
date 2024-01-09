@@ -1,18 +1,24 @@
 #!/bin/bash
-cd /home/myuser/CASE
-CONTAINER_PYTHON=${1:-/opt/brainvisa/bin/python}
+. /etc/bash.bashrc;
+
+echo "From anatomist_client " > /tmp/out_ana
+
+CONTAINER_PYTHON=${1:-/casa/install/bin/python}
 CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
-MASTERIP=${3:-11.0.0.11}
-IS_ATLAS=${4:-false}
+CONTAINER_ANA_LIB=${3:-/casa/install}
+MASTERIP=${4:-11.0.0.11}
+IS_ATLAS=${5:-false}
 
 echo ${SINGULARITYID}; #export DISPLAY=:1;
 export DISPLAY=$(pgrep -fa Xvfb | sed -e "s&.*:\([0-9]*\) .*&:\1&")
 if ( ! ${IS_ATLAS} ); then
-    OUT=~/.vnc/out_ana
-    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${SINGULARIYID} --url ${MASTERIP} 2>&1 |tee ${OUT} &
+    OUT=$HOME/.vnc/out_ana
+    echo "PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH}  ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${SINGULARIYID} --url ${MASTERIP}" > ${OUT}
+    PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH} ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${SINGULARIYID} --url ${MASTERIP} 2>&1 |tee ${OUT} &
 else
-    OUT=~/.vnc/out_ana_atlas
-    ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-atlas --url ${MASTERIP} 2>&1 |tee ${OUT} &
+    OUT=$HOME/.vnc/out_ana_atlas
+    echo "PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH} ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-atlas --url ${MASTERIP}" > ${OUT}
+    PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH} ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-atlas --url ${MASTERIP} 2>&1 |tee ${OUT} &
 fi
 
 i=0

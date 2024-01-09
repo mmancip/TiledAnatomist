@@ -44,10 +44,6 @@ NUM_DOCKERS=int(config['CASE']['NUM_DOCKERS'])
 
 CASE_DOCKER_PATH=config['CASE']['CASE_DOCKER_PATH']
 
-network=config['CASE']['network']
-nethost=config['CASE']['nethost']
-domain=config['CASE']['domain']
-
 OPTIONssh=config['CASE']['OPTIONssh']
 SOCKETdomain=config['CASE']['SOCKETdomain']
 
@@ -62,6 +58,7 @@ CASE_DATA_CONFIG=config['CASE']['CASE_DATA_CONFIG']
 START_ANA_DISPATCH=config['CASE']['START_ANA_DISPATCH']
 CONTAINER_PYTHON=config['CASE']['CONTAINER_PYTHON']
 CONTAINER_ANA_DISPATCHER=config['CASE']['CONTAINER_ANA_DISPATCHER']
+CONTAINER_ANA_LIB=config['CASE']['CONTAINER_ANA_LIB']
 
 OPTIONS=config['CASE']['OPTIONS'].replace("$","").replace('"','')
 print("\nOPTIONS from CASE_CONFIG : "+OPTIONS)
@@ -122,15 +119,16 @@ COMMAND_TiledAnatomist=LaunchTS+COMMAND_GIT
 client.send_server(COMMAND_TiledAnatomist)
 print("Out of git clone TiledAnatomist : "+ str(client.get_OK()))
 
-COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/anatomist_server "+\
-               "TiledAnatomist/anatomist_client "+\
-               "TiledAnatomist/anatomist_dispatcher "+\
-               "TiledAnatomist/patch_nodes_file_with_data.py "+\
+COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/patch_nodes_file_with_data.py "+\
                "TiledAnatomist/build_nodes_file "+\
-               "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
-               "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
                "TiledAnatomist/icons "+\
                "./"
+
+# TiledAnatomist/anatomist_server "+\
+# TiledAnatomist/anatomist_client "+\
+# TiledAnatomist/anatomist_dispatcher "+\
+# "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
+# "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
 
 client.send_server(COMMAND_copy)
 print("Out of copy scripts from TiledAnatomist : "+ str(client.get_OK()))
@@ -149,7 +147,6 @@ def Run_singularitys():
     COMMAND="bash -c \""+os.path.join(TILESINGULARITYS_DIR,"launch_singularitys")+" "+REF_CAS+" "+GPU_FILE+" "+SSH_FRONTEND+":"+SSH_IP+" "+TILEDVIZ_DIR+" "+TILESINGULARITYS_DIR+\
              " TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
              " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
-#             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
 
     logging.warning("\nCommand singularitys : "+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
@@ -220,10 +217,13 @@ print("after launch vnc servers %r" % (stateVM))
 
 
 def Run_server():
+    COMMANDserver=os.path.join(CASE_DOCKER_PATH,'anatomist_server')+' '+\
+                       CONTAINER_PYTHON+' '+\
+                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                       CONTAINER_ANA_LIB
+    print("COMMAND server |%s|" % (COMMANDserver))
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       os.path.join(CASE_DOCKER_PATH,'anatomist_server')+' '+
-                       CONTAINER_PYTHON+' '+
-                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER))
+                       COMMANDserver)
     print("Out of anatomist_server : "+ str(client.get_OK()))
     sys.stdout.flush()
 
@@ -236,27 +236,36 @@ except:
     traceback.print_exc(file=sys.stdout)
 
 def Get_server_IP():
+    global stateVM
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       'bash -c "'+os.path.join(TILEDVIZ_DIR,'TVConnections/get_ip.sh')+'; cp .vnc/myip CASE/serverip"')
+                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh')+
+                       '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
-    print("Out of get ip : "+ str(client.get_OK()))
-    sys.stdout.flush()
+    OutIP=client.get_OK()
+    print("Out of get ip : "+ str(OutIP))
+    if (OutIP):
+        stateVM=False
+        sys.stdout.flush()
+        return "1.1.1.1"
+    
     get_file_client(client,TileSet,JOBPath,"serverip",".")
     # while( get_file_client(client,TileSet,JOBPath,"serverip",".") < 0):
     #     time.sleep(1)
     #     pass
     try:
         with open("serverip",'r') as fserverip:
-            init_IP=fserverip.read().replace(domain+'.',"").replace("\n","")
-            print("Server ip : "+domain+'.'+init_IP)
+            init_IP=fserverip.read().replace("\n","") #.replace(domain+'.',"").replace("\n","")
+            print("Server ip : "+init_IP)
             sys.stdout.flush()
     except:
         print("Cannot retreive server ip.")        
         sys.stdout.flush()
         init_IP="1.1.1.1"
+        stateVM=False
         pass
-    return init_IP
     sys.stdout.flush()
+    return init_IP
+
 
 try:
     if (stateVM):
@@ -287,11 +296,12 @@ def Run_clients():
         arglist=list(map(containerId, sublist))
         #print(str(arglist))
         COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
-                       CONTAINER_PYTHON+' '+\
-                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
-                       domain+"."+init_IP
-        sys.stdout.flush()
+                      CONTAINER_PYTHON+' '+\
+                      os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                      CONTAINER_ANA_LIB+' '+init_IP
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
+        sys.stdout.flush()
+        # client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+COMMANDclient)
         client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
         print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
@@ -303,11 +313,13 @@ def Run_clients():
         #     domain+"."+init_IP)
         
     if HAVE_ATLAS:
-        client.send_server(ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+
-                           os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+
-                           CONTAINER_PYTHON+' '+
-                           os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+
-                           domain+"."+init_IP+' true' )
+        COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
+                      CONTAINER_PYTHON+' '+\
+                      os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                      CONTAINER_ANA_LIB+' '+init_IP+' true'
+        print("Command %d of anatomist_client : %s " % (NUM_ANA+1,COMMANDclient))
+        sys.stdout.flush()
+        client.send_server(ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+COMMANDclient)
         print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
         sys.stdout.flush()
 
@@ -322,9 +334,10 @@ except:
 
 # execute synchrone ?
 def Run_dispatcher():
-    COMMAND_DISPATCHER=os.path.join(CASE_DOCKER_PATH,'anatomist_dispatcher')+str(NUM_ANA)+' '+\
+    COMMAND_DISPATCHER=os.path.join(CASE_DOCKER_PATH,'anatomist_dispatcher')+' '+str(NUM_ANA)+' '+\
                        CONTAINER_PYTHON+' '+\
                        os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                       CONTAINER_ANA_LIB+' '+\
                        os.path.join(CASE_DOCKER_PATH,START_ANA_DISPATCH)+' '+\
                        os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_SINGULARITY

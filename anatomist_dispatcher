@@ -1,13 +1,16 @@
 #!/bin/bash
+. /etc/bash.bashrc;
+
 cd /home/myuser/CASE
 NUM_ANA=${1:-2}
-CONTAINER_PYTHON=${2:-/opt/brainvisa/bin/python}
+CONTAINER_PYTHON=${2:-/casa/install/bin/python}
 CONTAINER_ANA_DISPATCHER=${3:-/home/myuser/CASE/ana_dispatcher.py}
-START_ANA_DISPATCH=${4:-/home/myuser/CASE/start_ana_dispatch.py}
-CASE_DATA_CONFIG=${5:-/home/myuser/CASE/case_data_config.json}
-DATA_PATH_DOCKER=${6:-/braindatas/database_learnclean}
+CONTAINER_ANA_LIB=${4:-/casa/install/python}
+START_ANA_DISPATCH=${5:-/home/myuser/CASE/start_ana_dispatch.py}
+CASE_DATA_CONFIG=${6:-/home/myuser/CASE/case_data_config.json}
+DATA_PATH_SINGULARIY=${7:-/braindatas}
 
-${CONTAINER_PYTHON} ${START_ANA_DISPATCH} -n ${NUM_ANA} -d ${DATA_PATH_DOCKER} -a ${CONTAINER_ANA_DISPATCHER} -c ${CASE_DATA_CONFIG} 2>&1 |tee ~/.vnc/out_dispatcher &
+PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH} ${CONTAINER_PYTHON} ${START_ANA_DISPATCH} -n ${NUM_ANA} -d ${DATA_PATH_SINGULARIY} -a ${CONTAINER_ANA_DISPATCHER} -c ${CASE_DATA_CONFIG} 2>&1 |tee $HOME/.vnc/out_dispatcher &
 
 i=0
 while [ true ]; do
