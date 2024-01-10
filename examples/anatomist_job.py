@@ -288,13 +288,15 @@ List_anatomist=range(2,NUM_ANA+1)
 def Run_clients():
     # Split the list :
     splv=10
-    for i in range(int(NUM_ANA/splv+1)):
-        sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
-        #print(str(sublist))
-        if (len(sublist) == 0):
-            break
-        arglist=list(map(containerId, sublist))
+    # for i in range(int(NUM_ANA/splv+1)):
+        # sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
+        # #print(str(sublist))
+        # if (len(sublist) == 0):
+        #     break
+        # arglist=list(map(containerId, sublist))
         #print(str(arglist))
+
+    for i in range(2,NUM_ANA+1):
         COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
                       CONTAINER_PYTHON+' '+\
                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
@@ -302,7 +304,8 @@ def Run_clients():
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
         sys.stdout.flush()
         # client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+COMMANDclient)
-        client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
+        client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') bash -c "SINGULARIYID=%03d ' % (i)+COMMANDclient+'"')
+        #client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
         print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
 
@@ -339,7 +342,7 @@ def Run_dispatcher():
                        os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
                        CONTAINER_ANA_LIB+' '+\
                        os.path.join(CASE_DOCKER_PATH,START_ANA_DISPATCH)+' '+\
-                       os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
+                       os.path.join(JOBPath,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
