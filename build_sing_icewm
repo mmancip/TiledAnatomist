@@ -9,6 +9,8 @@ sudo singularity exec --writable $brainvisa bash -c 'LC_ALL=C; apt-get install -
 sudo singularity exec --writable $brainvisa bash -c 'LC_ALL=C; apt-get build-dep -y --fix-missing x11vnc'
 sudo singularity exec --writable $brainvisa bash -c 'cd /usr/src && git clone https://github.com/LibVNC/x11vnc.git; cd x11vnc && autoreconf -fiv && ./configure && make install'
 
+sudo singularity exec --writable $brainvisa bash -c 'LC_ALL=C; ln -s /casa/install/share/brainvisa-share-5.1/models/models_2008/descriptive_models/segments/global_registered_spam_right/meshes/Rspam_model_meshes_1.data/aims_Tmtktri.mesh /casa/install/share/brainvisa-share-5.1/models/models_2008/descriptive_models/segments/global_registered_spam_right/meshes/Rspam_model_meshes_1.data/aims_Tmtktri; ln -s /casa/install/share/brainvisa-share-5.1/models/models_2008/descriptive_models/segments/global_registered_spam_left/meshes/Lspam_model_meshes_1.data/aims_Tmtktri.mesh /casa/install/share/brainvisa-share-5.1/models/models_2008/descriptive_models/segments/global_registered_spam_left/meshes/Lspam_model_meshes_1.data/aims_Tmtktri'
+
 sudo mount -t tmpfs tmpfs /tmp
 sudo singularity build brainvisa-$1_icewm.sif $brainvisa
 sudo umount /tmp
