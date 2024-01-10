@@ -2,7 +2,7 @@
 from __future__ import print_function
 
 import sys
-import distutils.spawn
+import shutil
 import subprocess
 import argparse
 import time
@@ -41,9 +41,9 @@ subjects = args.subject
 
 ana_dispatcher = args.anadispatch
 if ana_dispatcher is None:
-    ana_dispatcher = distutils.spawn.find_executable('ana_dispatcher.py')
+    ana_dispatcher = shutil.which('ana_dispatcher.py')
     if ana_dispatcher is None:
-        ana = distutils.spawn.find_executable('anatomist')
+        ana = shutil.which('anatomist')
         bindir = os.path.dirname(ana)
         if bindir.endswith('real-bin'):
             bindir = os.path.dirname(ana)
@@ -110,32 +110,22 @@ for i, data in enumerate(data_list):
             if os.path.exists(wm_mesh_file):
                 break
         subprocess.call([sys.executable, ana_dispatcher, '-m',
-                         '<anatomist-%03d> '
-                         'self.main.load_sulci_graph("%s", open_window=True, '
-                         'label="name")' % (i + 2, graph_file)])
+                         '<anatomist-%03d> self.main.load_sulci_graph("%s", open_window=True, label="name")' % (i + 2, graph_file)])
         subprocess.call([sys.executable, ana_dispatcher, '-m',
-                         '<anatomist-%03d> '
-                         'self.main.load_wm_mesh("%s", '
-                         'win_num=%d)' % (i + 2, wm_mesh_file, sn)])
+                         '<anatomist-%03d> self.main.load_wm_mesh("%s", win_num=%d)' % (i + 2, wm_mesh_file, sn)])
 
     # set subject name as window title so that we know who is who
     subprocess.call([sys.executable, ana_dispatcher, '-m',
-                      '<anatomist-%03d> '
-                      'self.main.block.internalWidget.widget.window()'
-                      '.setWindowTitle("subject: %s")'
-                      % (i + 2, attribs['subject'])])
+        '<anatomist-%03d> self.main.block.internalWidget.widget.window().setWindowTitle("subject: %s")'% (i + 2, attribs['subject'])])
 
 
 subprocess.call([sys.executable, ana_dispatcher, '-m',
                  '<anatomist-atlas> self.main.load_model("", True)'])
 
 subprocess.call([sys.executable, ana_dispatcher, '-m',
-                 'self.main.block.internalWidget.widget.window().'
-                 'showMaximized()'])
+                 'self.main.block.internalWidget.widget.window().showMaximized()'])
 # set subnject name as window title so that we know who is who
 subprocess.call([sys.executable, ana_dispatcher, '-m',
-                  '<anatomist-atlas> '
-                  'self.main.block.internalWidget.widget.window()'
-                  '.setWindowTitle("atlas")'])
+                  '<anatomist-atlas> self.main.block.internalWidget.widget.window().setWindowTitle("atlas")'])
 
 print('dispatcher done.')
