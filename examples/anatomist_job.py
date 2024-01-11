@@ -42,8 +42,6 @@ config.read(CASE_config)
 CASE=config['CASE']['CASE_NAME']
 NUM_DOCKERS=int(config['CASE']['NUM_DOCKERS'])
 
-CASE_DOCKER_PATH=config['CASE']['CASE_DOCKER_PATH']
-
 OPTIONssh=config['CASE']['OPTIONssh']
 SOCKETdomain=config['CASE']['SOCKETdomain']
 
@@ -93,6 +91,11 @@ LaunchTS='launch TS='+TileSet+" "+JOBPath+' '
 COMMAND_GIT="git clone https://github.com/mmancip/TiledAnatomist.git"
 print("command_git : "+COMMAND_GIT)
 os.system(COMMAND_GIT)
+sys.stdout.flush()
+COMMAND_GITS=" bash -c 'cd TiledAnatomist; git checkout Singularity'"
+print("command_git Singularity: "+COMMAND_GITS)
+os.system(COMMAND_GITS)
+sys.stdout.flush()
 
 # Send CASE and SITE files
 try:
@@ -118,17 +121,24 @@ except:
 COMMAND_TiledAnatomist=LaunchTS+COMMAND_GIT
 client.send_server(COMMAND_TiledAnatomist)
 print("Out of git clone TiledAnatomist : "+ str(client.get_OK()))
+sys.stdout.flush()
+COMMAND_TiledAnatomist=LaunchTS+COMMAND_GITS
+print("Command git checkout Singularity TiledAnatomist "+COMMAND_TiledAnatomist)
+sys.stdout.flush()
+client.send_server(COMMAND_TiledAnatomist)
+print("Out of git checkout Singularity TiledAnatomist : "+ str(client.get_OK()))
+sys.stdout.flush()
 
 COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/patch_nodes_file_with_data.py "+\
                "TiledAnatomist/build_nodes_file "+\
+               "TiledAnatomist/icons "+\
+               "TiledAnatomist/anatomist_server "+\
+               "TiledAnatomist/anatomist_client "+\
+               "TiledAnatomist/anatomist_dispatcher "+\
+               "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
+               "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
                "./"
 
-#               "TiledAnatomist/icons "+\
-# TiledAnatomist/anatomist_server "+\
-# TiledAnatomist/anatomist_client "+\
-# TiledAnatomist/anatomist_dispatcher "+\
-# "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
-# "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
 
 client.send_server(COMMAND_copy)
 print("Out of copy scripts from TiledAnatomist : "+ str(client.get_OK()))
@@ -217,9 +227,9 @@ print("after launch vnc servers %r" % (stateVM))
 
 
 def Run_server():
-    COMMANDserver=os.path.join(CASE_DOCKER_PATH,'anatomist_server')+' '+\
+    COMMANDserver=os.path.join(JOBPath,'anatomist_server')+' '+\
                        CONTAINER_PYTHON+' '+\
-                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                        CONTAINER_ANA_LIB
     print("COMMAND server |%s|" % (COMMANDserver))
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
@@ -277,13 +287,6 @@ except:
 
 List_anatomist=range(2,NUM_ANA+1)
     
-# Give the anatomist_client command to the whole list : 
-#   (obsolete : list(map(containerId, List_anatomist)) and too long list for message)
-# client.send_server(bExecuteTS+' Tiles='+str(List_anatomist)+' '+
-#     CASE_DOCKER_PATH+'anatomist_client '+
-#     CONTAINER_PYTHON+' '+
-#     CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
-#     domain+"."+init_IP)
 
 def Run_clients():
     # Split the list :
@@ -297,9 +300,9 @@ def Run_clients():
         #print(str(arglist))
 
     for i in range(2,NUM_ANA+1):
-        COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
+        COMMANDclient=os.path.join(JOBPath,'anatomist_client')+' '+\
                       CONTAINER_PYTHON+' '+\
-                      os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                      os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                       CONTAINER_ANA_LIB+' '+init_IP
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
         sys.stdout.flush()
@@ -308,17 +311,11 @@ def Run_clients():
         #client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
         print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
-
-        # client.send_server(bExecuteTS+' '+
-        #     CASE_DOCKER_PATH+'anatomist_client '+
-        #     CONTAINER_PYTHON+' '+
-        #     CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
-        #     domain+"."+init_IP)
         
     if HAVE_ATLAS:
-        COMMANDclient=os.path.join(CASE_DOCKER_PATH,'anatomist_client')+' '+\
+        COMMANDclient=os.path.join(JOBPath,'anatomist_client')+' '+\
                       CONTAINER_PYTHON+' '+\
-                      os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                      os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                       CONTAINER_ANA_LIB+' '+init_IP+' true'
         print("Command %d of anatomist_client : %s " % (NUM_ANA+1,COMMANDclient))
         sys.stdout.flush()
@@ -337,11 +334,11 @@ except:
 
 # execute synchrone ?
 def Run_dispatcher():
-    COMMAND_DISPATCHER=os.path.join(CASE_DOCKER_PATH,'anatomist_dispatcher')+' '+str(NUM_ANA)+' '+\
+    COMMAND_DISPATCHER=os.path.join(JOBPath,'anatomist_dispatcher')+' '+str(NUM_ANA)+' '+\
                        CONTAINER_PYTHON+' '+\
-                       os.path.join(CASE_DOCKER_PATH,CONTAINER_ANA_DISPATCHER)+' '+\
+                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                        CONTAINER_ANA_LIB+' '+\
-                       os.path.join(CASE_DOCKER_PATH,START_ANA_DISPATCH)+' '+\
+                       os.path.join(JOBPath,START_ANA_DISPATCH)+' '+\
                        os.path.join(JOBPath,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
@@ -417,7 +414,19 @@ def showGUI(tileNum=-1,tileId='001'):
     client.send_server(ExecuteTS+TilesStr+COMMAND)
     client.get_OK()
 
-    
+def kill_all_containers():
+    stateVM=True
+    client.send_server(ExecuteTS+' killall -9 Xvfb')
+    state=client.get_OK()
+    print("Out of killall command : "+ str(state))
+    client.send_server(LaunchTS+" "+COMMANDStop)
+    state=client.get_OK()
+    print("Out of COMMANDStop : "+ str(state))
+    stateVM=(state == 0)
+    time.sleep(2)
+    Remove_TileSet()
+    return stateVM
+         
 
 #isActions=True
 launch_actions_and_interact()
