@@ -121,9 +121,9 @@ print("Out of git clone TiledAnatomist : "+ str(client.get_OK()))
 
 COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/patch_nodes_file_with_data.py "+\
                "TiledAnatomist/build_nodes_file "+\
-               "TiledAnatomist/icons "+\
                "./"
 
+#               "TiledAnatomist/icons "+\
 # TiledAnatomist/anatomist_server "+\
 # TiledAnatomist/anatomist_client "+\
 # TiledAnatomist/anatomist_dispatcher "+\
@@ -304,7 +304,7 @@ def Run_clients():
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
         sys.stdout.flush()
         # client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+COMMANDclient)
-        client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') bash -c "SINGULARIYID=%03d ' % (i)+COMMANDclient+'"')
+        client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') bash -c "cd '+JOBPath+'; SINGULARITYID=%03d ' % (i)+COMMANDclient+'"')
         #client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
         print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
@@ -417,19 +417,6 @@ def showGUI(tileNum=-1,tileId='001'):
     client.send_server(ExecuteTS+TilesStr+COMMAND)
     client.get_OK()
 
-
-def kill_all_containers():
-    stateVM=True
-    client.send_server(ExecuteTS+' killall -9 Xvfb')
-    state=client.get_OK()
-    print("Out of killall command : "+ str(state))
-    client.send_server(LaunchTS+" "+COMMANDStop)
-    state=client.get_OK()
-    print("Out of COMMANDStop : "+ str(state))
-    stateVM=(state == 0)
-    time.sleep(2)
-    Remove_TileSet()
-    return stateVM
     
 
 #isActions=True
@@ -439,6 +426,11 @@ try:
     print("isActions: "+str(isActions))
 except:
     print("isActions not defined.")
+
+
+# COMMAND="rm -rf $HOME/.vnc"
+# client.send_server(ExecuteTS+COMMAND)
+# client.get_OK()
 
 kill_all_containers()
     
