@@ -28,7 +28,8 @@ TILESINGULARITYS_DIR=os.path.join(TILEDVIZ_DIR,"TVConnections/Singularity")
 TilesScriptsPath=TILESINGULARITYS_DIR
 SPACE_DIR=config['SITE']['SPACE_DIR']
 #NOVNC_URL=config['SITE']['NOVNC_URL']
-GPU_FILE=config['SITE']['GPU_FILE']
+#GPU_FILE=config['SITE']['GPU_FILE']
+
 
 SSH_FRONTEND=config['SITE']['SSH_FRONTEND']
 SSH_LOGIN=config['SITE']['SSH_LOGIN']
@@ -64,6 +65,17 @@ OPTIONS=OPTIONS.replace("JOBPath",JOBPath)
 OPTIONS=OPTIONS.replace('{','|{').replace('}','}|').split('|')
 OPTIONS="".join(list(map( replaceconf,OPTIONS)))
 print("OPTIONS after replacement : "+OPTIONS)
+
+
+SBATCH_NTASKS=config['CASE']['SBATCH_NTASKS']               # Nombre de processus
+SBATCH_time=config['CASE']['SBATCH_time']                   # Temps souhaité pour la réservation
+SBATCH_cpus_per_task=config['CASE']['SBATCH_cpus_per_task'] # utilisez 10 coeurs pour obtenir 1/4 de la RAM CPU
+SBATCH_gpus=config['CASE']['SBATCH_gpus']
+SBATCH_exclusive=eval(config['CASE']['SBATCH_exclusive'])   # Attention utilise la totalité du noeud
+SBATCH_partition=config['CASE']['SBATCH_partition']         # Queue
+
+CONTAINERS_PER_GPU=config['CASE']['CONTAINERS_PER_GPU']
+
 
 if HAVE_ATLAS:
     NUM_ANA=NUM_DOCKERS-1
@@ -107,7 +119,7 @@ try:
     send_file_server(client,TileSet,".", SITE_config, JOBPath)
     SITE_config=os.path.join(JOBPath,os.path.basename(SITE_config))
     send_file_server(client,TileSet,".", os.path.basename(CASE_DATA_CONFIG), JOBPath)
-    send_file_server(client,TileSet,".", "list_hostsgpu", JOBPath)
+#    send_file_server(client,TileSet,".", GPU_FILE, JOBPath)
 
 except:
     print("Error sending files !")
@@ -137,6 +149,7 @@ COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/patch_nodes_file_with_data.py "+\
                "TiledAnatomist/anatomist_dispatcher "+\
                "TiledAnatomist/"+START_ANA_DISPATCH+" "+\
                "TiledAnatomist/"+CONTAINER_ANA_DISPATCHER+" "+\
+               os.path.join(TILESINGULARITYS_DIR,"slurm_singularitys")+" "+\
                "./"
 
 
@@ -148,22 +161,108 @@ REF_CAS=str(NUM_DOCKERS)+" "+DATE+" "+SPACE_DIR+" "+SINGULARITY_NAME
 
 print("\nREF_CAS : "+REF_CAS)
 
-COMMANDStop=os.path.join(TILESINGULARITYS_DIR,"stop_singularitys")+" "+REF_CAS+" "+os.path.join(JOBPath,GPU_FILE)
-print("\n"+COMMANDStop)
-sys.stdout.flush()
+#COMMANDStop=os.path.join(TILESINGULARITYS_DIR,"stop_singularitys")+" "+REF_CAS+" "+os.path.join(JOBPath,GPU_FILE)
+#print("\n"+COMMANDStop)
+#sys.stdout.flush()
+
+def sed_slurm(sed_string):
+    COMMAND="bash -c \"sed -i "+os.path.join(JOBPath,"slurm_singularitys")+\
+        " -e '"+sed_string+"'\"" #+\
+    #        " > "+os.path.join(JOBPath,"output_sed_slurm")+datetime.datetime.isoformat(datetime.datetime.now(),sep='_').replace(":","-")+" 2>&1 \""
+    logging.warning("\nCommand sed slurm_singularitys : \n"+COMMAND)
+    client.send_server(LaunchTS+' '+COMMAND)
+    state=client.get_OK()
+    logging.warning("Out of sed slurm_singularity : "+ str(state))
+    return state
 
 # Launch singularitys
 def Run_singularitys():
-    COMMAND="bash -c \""+os.path.join(TILESINGULARITYS_DIR,"launch_singularitys")+" "+REF_CAS+" "+GPU_FILE+" "+SSH_FRONTEND+":"+SSH_IP+" "+TILEDVIZ_DIR+" "+TILESINGULARITYS_DIR+\
-             " TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
-             " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
+    stateVM=True
+    # Slurm config
+    stateVM=stateVM and (sed_slurm("s&NUM=NUM_DOCKERS&NUM="+str(NUM_DOCKERS)+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&ntasks=NTASKS&ntasks="+SBATCH_NTASKS+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --time=TIME&SBATCH --time="+SBATCH_time+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --cpus-per-task=TASKS&SBATCH --cpus-per-task="+SBATCH_cpus_per_task+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --gres=gpu:GPUS&SBATCH --gres=gpu:"+SBATCH_gpus+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&NGPUS=GPUS&NGPUS="+SBATCH_gpus+"&") == 0)
+    SBATCH_nodes=str(int((NUM_DOCKERS-1)/(int(SBATCH_gpus)*int(CONTAINERS_PER_GPU)))+1)
+    logging.warning("Number of nodes asked :"+SBATCH_nodes)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --nodes=NODES&SBATCH --nodes="+SBATCH_nodes+"&") == 0)
+    if (SBATCH_exclusive):
+        STRING_EXCLUSIVE="s&##SBATCH --exclusive&#SBATCH --exclusive&"
+        stateVM=stateVM and (sed_slurm(STRING_EXCLUSIVE) == 0)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --partition=PARTITION&SBATCH --partition="+SBATCH_partition+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&DATE=DATE&DATE="+DATE+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&DIR=/dockerspace&DIR="+SPACE_DIR+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&SINGULARITY_NAME=ubuntu18_icewm.sif&SINGULARITY_NAME="+SINGULARITY_NAME+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&FRONTENDIP=frontend:192.168.0.254&FRONTENDIP="+SSH_FRONTEND+":"+SSH_IP+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&TILEDVIZ_DIR=/TiledViz&TILEDVIZ_DIR="+TILEDVIZ_DIR+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&TILESINGULARITYS_path=/TiledViz/TVConnections/Singularity&TILESINGULARITYS_path="+TilesScriptsPath+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&TileSetP=55555&TileSetP=TileSetPort&") == 0)
+    stateVM=stateVM and (sed_slurm("s&FRONTEND=192.168.0.1&FRONTEND="+UserFront+"@"+Frontend+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&OPTIONS=OTHER_OPTIONS&OPTIONS="+OPTIONS+"&") == 0)
 
+    COMMAND="bash -c \"sbatch "+os.path.join(JOBPath,"slurm_singularitys")+\
+             " > "+os.path.join(JOBPath,"output_submit")+" 2>&1 \"" 
     logging.warning("\nCommand singularitys : "+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
     state=client.get_OK()
     logging.warning("Out of launch singularity : "+ str(state))
     sys.stdout.flush()
-    stateVM=(state == 0)
+    stateVM=stateVM and (state == 0)
+    time.sleep(20)
+
+    get_file_client(client,TileSet,JOBPath,"output_submit",".")
+    try:
+        with open("output_submit",'r') as fsubmit:
+            JobID=fsubmit.read().replace("Submitted batch job ","").replace("\n","")
+            print("Job ID : "+JobID)
+            sys.stdout.flush()
+    except:
+        print("Cannot retreive Slurm job ID.")
+        sys.stdout.flush()
+        JobID="0"
+        stateVM=False
+        pass
+    sys.stdout.flush()
+    time.sleep(20)
+    
+    COMMAND="bash -c \"squeue --start -j "+JobID+" > "+os.path.join(JOBPath,"output_squeue")+" 2>&1 \"" 
+    logging.warning("\nCommand squeue : "+COMMAND)
+    client.send_server(LaunchTS+' '+COMMAND)
+    state=client.get_OK()
+    logging.warning("Out of launch squeue : "+ str(state))
+    sys.stdout.flush()
+    stateVM=stateVM and (state == 0)
+
+    # squeue --start -j <jobid>
+
+    # JOBID   PARTITION    NAME     USER ST          START_TIME  NODES SCHEDNODES           NODELIST(REASON)
+    # 439148   compute    LSea1  u123456 PD 2015-10-15T16:36:49     80 m[10020-10027,10029, (Resources)
+                                                                        
+    get_file_client(client,TileSet,JOBPath,"output_squeue",".")
+    try:
+        squeuestr=r'(?P<jobid>\d+)\s+(?P<partition>\w+)\s+(?P<name>\w+)\s+(?P<user>\w+)\s+(?P<state>[A-Z][A-Z])\s+(?P<startdate>\S+)\s+(?P<nodes>\d+)\s+(?P<schednodes>\S+)\s+(?P<nodelist>\S+)\s*'
+        squeue_re = re.compile(r''+squeuestr)
+        with open("output_squeue",'r') as fsqueue:
+            lastline=fsqueue.readlines()[-1]
+            ore_squeue=squeue_re.search(lastline)
+            print(str(ore_squeue.groups()))
+            StartDate=ore_squeue.group("startdate")
+            print("SartDate : "+StartDate)
+            Remain=(datetime.datetime.strptime(StartDate, '%Y-%m-%dT%H:%M:%S')-datetime.datetime.now()).total_seconds()
+            print("Remain seconds :"+str(Remain))
+            sys.stdout.flush()
+            stateVM=stateVM and (state == 0)
+    except:
+        print("Cannot retreive Slurm job StartDate.")
+        sys.stdout.flush()
+        stateVM=False
+        return False
+
+    # Wait for start submission
+    time.sleep(Remain)
+
     return stateVM
 
 try:
@@ -175,7 +274,6 @@ except:
     kill_all_containers()
 
 
-    
 try:
     if (stateVM):
         build_nodes_file()
@@ -418,12 +516,12 @@ def kill_all_containers():
     stateVM=True
     client.send_server(ExecuteTS+' killall -9 Xvfb')
     state=client.get_OK()
-    print("Out of killall command : "+ str(state))
-    client.send_server(LaunchTS+" "+COMMANDStop)
-    state=client.get_OK()
-    print("Out of COMMANDStop : "+ str(state))
-    stateVM=(state == 0)
-    time.sleep(2)
+    print("Out of killall xvfb command : "+ str(state))
+    # client.send_server(LaunchTS+" "+COMMANDStop)
+    # state=client.get_OK()
+    # print("Out of COMMANDStop : "+ str(state))
+    # stateVM=(state == 0)
+    # time.sleep(2)
     Remove_TileSet()
     return stateVM
          

@@ -1,1 +1,1 @@
-tar -cf config.tar --dereference actions.json case_config.ini case_data_config.json list_hostsgpu site_config.ini 
+tar -cf config.tar --dereference actions.json case_config.ini case_data_config.json site_config.ini 
