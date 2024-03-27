@@ -226,42 +226,70 @@ def Run_singularitys():
         pass
     sys.stdout.flush()
     time.sleep(20)
-    
-    COMMAND="bash -c \"squeue --start -j "+JobID+" > "+os.path.join(JOBPath,"output_squeue")+" 2>&1 \"" 
+    #code.interact(banner="Test squeue interactive :",local=dict(globals(), **locals()))
+
+    notstarted=True
+    COMMAND="bash -c \"squeue -j "+JobID+" > "+os.path.join(JOBPath,"output_squeue")+" 2>&1 \"" 
     logging.warning("\nCommand squeue : "+COMMAND)
-    client.send_server(LaunchTS+' '+COMMAND)
-    state=client.get_OK()
-    logging.warning("Out of launch squeue : "+ str(state))
-    sys.stdout.flush()
-    stateVM=stateVM and (state == 0)
-
-    # squeue --start -j <jobid>
-
-    # JOBID   PARTITION    NAME     USER ST          START_TIME  NODES SCHEDNODES           NODELIST(REASON)
-    # 439148   compute    LSea1  u123456 PD 2015-10-15T16:36:49     80 m[10020-10027,10029, (Resources)
-                                                                        
-    get_file_client(client,TileSet,JOBPath,"output_squeue",".")
-    try:
-        squeuestr=r'(?P<jobid>\d+)\s+(?P<partition>\w+)\s+(?P<name>\w+)\s+(?P<user>\w+)\s+(?P<state>[A-Z][A-Z])\s+(?P<startdate>\S+)\s+(?P<nodes>\d+)\s+(?P<schednodes>\S+)\s+(?P<nodelist>\S+)\s*'
-        squeue_re = re.compile(r''+squeuestr)
-        with open("output_squeue",'r') as fsqueue:
-            lastline=fsqueue.readlines()[-1]
-            ore_squeue=squeue_re.search(lastline)
-            print(str(ore_squeue.groups()))
-            StartDate=ore_squeue.group("startdate")
-            print("SartDate : "+StartDate)
-            Remain=(datetime.datetime.strptime(StartDate, '%Y-%m-%dT%H:%M:%S')-datetime.datetime.now()).total_seconds()
-            print("Remain seconds :"+str(Remain))
+    # time wait for scheduling
+    twait=4
+    # max time wait in seconds
+    mwait=600
+    # iter
+    i=0
+    while(notstarted):
+        if (i>mwait/twait):
+            logging.error("Scheduler never run after max time wait %d and %d iterations." % (mwait,i))
+            sys.stdout.flush()
+            return False
+            
+        client.send_server(LaunchTS+' '+COMMAND)
+        state=client.get_OK()
+        logging.warning("Out of launch squeue : "+ str(state))
+        sys.stdout.flush()
+        stateVM=stateVM and (state == 0)
+        if (not stateVM):
+            logging.error("Cannot retreive squeue output.")
+            sys.stdout.flush()
+            return False
+        
+        try:
+            get_file_client(client,TileSet,JOBPath,"output_squeue",".")
+            #JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+            squeuestr=r'(?P<jobid>\d+)\s+(?P<partition>\w+)\s+(?P<name>\w+)\s+(?P<user>\w+)\s+(?P<state>[A-Z]*)\s+(?P<time>\S+)\s+(?P<nodes>\d+)\s+(?P<nodelist>\S+)\s*'
+            squeue_re = re.compile(r''+squeuestr)
+            with open("output_squeue",'r') as fsqueue:
+                alllines=fsqueue.readlines()
+                if (len(alllines)>1):
+                    lastline=alllines[-1]
+                    ore_squeue=squeue_re.search(lastline)
+                    print(str(ore_squeue.groups()))
+                    State=ore_squeue.group("state")
+                    print("State : "+State)
+                    if (State == 'R'):
+                        notstarted=False
             sys.stdout.flush()
             stateVM=stateVM and (state == 0)
-    except:
-        print("Cannot retreive Slurm job StartDate.")
-        sys.stdout.flush()
-        stateVM=False
-        return False
-
+        except:
+            logging.error("Cannot retreive Slurm job status.")
+            sys.stdout.flush()
+            stateVM=False
+            return False
+            #COMMAND="bash -c --start \"squeue -j "+JobID+" > "+os.path.join(JOBPath,"output_squeue")+" 2>&1 \""
+            #JOBID PARTITION     NAME     USER ST          START_TIME  NODES SCHEDNODES           NODELIST(REASON)
+            #squeuestr=r'(?P<jobid>\d+)\s+(?P<partition>\w+)\s+(?P<name>\w+)\s+(?P<user>\w+)\s+(?P<state>[A-Z][A-Z])\s+(?P<startdate>\S+)\s+(?P<nodes>\d+)\s+(?P<schednodes>\S+)\s+(?P<nodelist>\S+)\s*'
+            #StartDate=ore_squeue.group("startdate")
+            #Remain=(datetime.datetime.strptime(StartDate, '%Y-%m-%dT%H:%M:%S')-datetime.datetime.now()).total_seconds()
+            #print("Remain seconds :"+str(Remain))
+            #            print("Cannot retreive Slurm job StartDate.")
+        time.sleep(twait)
+        os.system("rm ./output_squeue")
+        i=i+1
     # Wait for start submission
-    time.sleep(Remain)
+    #time.sleep(Remain)
+
+    logging.warning("Job is running : wait 10s for singularity launched.")
+    time.sleep(10)
 
     return stateVM
 
@@ -517,6 +545,12 @@ def kill_all_containers():
     client.send_server(ExecuteTS+' killall -9 Xvfb')
     state=client.get_OK()
     print("Out of killall xvfb command : "+ str(state))
+    # Send a file-signal for the slurm job to end sleeping and finished
+    COMMAND="bash -c \"touch "+os.path.join(JOBPath,"end_slurm_singularitys")+"'\"" #+\
+    logging.warning("\nCommand end slurm_singularitys : \n"+COMMAND)
+    client.send_server(LaunchTS+' '+COMMAND)
+    state=client.get_OK()
+    logging.warning("Out of end slurm_singularity : "+ str(state))
     # client.send_server(LaunchTS+" "+COMMANDStop)
     # state=client.get_OK()
     # print("Out of COMMANDStop : "+ str(state))
