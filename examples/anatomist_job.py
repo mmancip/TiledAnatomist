@@ -195,7 +195,7 @@ def Run_singularitys():
     stateVM=stateVM and (sed_slurm("s&DATE=DATE&DATE="+DATE+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&DIR=/dockerspace&DIR="+SPACE_DIR+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&SINGULARITY_NAME=ubuntu18_icewm.sif&SINGULARITY_NAME="+SINGULARITY_NAME+"&") == 0)
-    stateVM=stateVM and (sed_slurm("s&FRONTENDIP=frontend:192.168.0.254&FRONTENDIP="+SSH_FRONTEND+":"+SSH_IP+"&") == 0)
+    #stateVM=stateVM and (sed_slurm("s&FRONTENDIP=frontend:192.168.0.254&FRONTENDIP="+SSH_FRONTEND+":"+SSH_IP+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&TILEDVIZ_DIR=/TiledViz&TILEDVIZ_DIR="+TILEDVIZ_DIR+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&TILESINGULARITYS_path=/TiledViz/TVConnections/Singularity&TILESINGULARITYS_path="+TilesScriptsPath+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&TileSetP=55555&TileSetP=TileSetPort&") == 0)
@@ -317,6 +317,7 @@ time.sleep(2)
 if (stateVM):
     all_resize("1920x1080")
 
+logging.warning("Before launch_tunnel.")
 
 try:
     if (stateVM):
