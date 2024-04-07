@@ -174,7 +174,21 @@ except:
     traceback.print_exc(file=sys.stdout)
     kill_all_containers()
 
-
+# Launch nodes.json file
+def launch_nodes_json():
+    if (os.path.exists("nodes.json")):
+        logging.error("Found old nodes.json")
+        print(os.system("ls -la nodes.json*"))
+        os.system('bash -c "mv nodes.json nodes.json_$(date +%F_%H-%M-%S)"')
+    out_get=get_file_client(client,TileSet,JOBPath,"nodes.json",".")
+    logging.warning("out of get_file nodes.json size : "+str(out_get))
+    while( out_get < 0):
+        time.sleep(2)
+        out_get=get_file_client(client,TileSet,JOBPath,"nodes.json",".")
+        logging.warning("out of get_file nodes.json : "+str(out_get))
+        pass
+    #os.system('rm -f ./nodes.json')
+    return True
     
 try:
     if (stateVM):
@@ -191,6 +205,7 @@ time.sleep(2)
 if (stateVM):
     all_resize("1920x1080")
 
+logging.warning("Before launch_tunnel.")
 
 try:
     if (stateVM):
@@ -416,14 +431,15 @@ def showGUI(tileNum=-1,tileId='001'):
 
 def kill_all_containers():
     stateVM=True
-    client.send_server(ExecuteTS+' killall -9 Xvfb')
-    state=client.get_OK()
-    print("Out of killall command : "+ str(state))
     client.send_server(LaunchTS+" "+COMMANDStop)
-    state=client.get_OK()
-    print("Out of COMMANDStop : "+ str(state))
-    stateVM=(state == 0)
-    time.sleep(2)
+    # state=client.get_OK()
+    # print("Out of COMMANDStop : "+ str(state))
+    # stateVM=(state == 0)
+    time.sleep(10)
+    # client.send_server(ExecuteTS+' killall -9 Xvfb')
+    # state=client.get_OK()
+    # print("Out of killall Xvfb command : "+ str(state))
+    # stateVM=stateVM and (state == 0)
     Remove_TileSet()
     return stateVM
          
