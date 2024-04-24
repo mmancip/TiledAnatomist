@@ -574,7 +574,7 @@ def Run_dispatcher():
                        os.path.join(JOBPath,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
+    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 > $HOME/.vnc/out_dispatcher_$$" &')
     print("Out of anatomist_dispatcher : "+str(client.get_OK()))
 
 try:
