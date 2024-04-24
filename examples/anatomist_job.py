@@ -35,6 +35,8 @@ SSH_FRONTEND=config['SITE']['SSH_FRONTEND']
 SSH_LOGIN=config['SITE']['SSH_LOGIN']
 SSH_IP=config['SITE']['SSH_IP']
 
+SSH_ENO=config['SITE']['SSH_ENO']
+
 SSL_PUBLIC=config['SITE']['SSL_PUBLIC']
 SSL_PRIVATE=config['SITE']['SSL_PRIVATE']
 
@@ -175,8 +177,10 @@ def sed_slurm(sed_string):
     logging.warning("Out of sed slurm_singularity : "+ str(state))
     return state
 
+JobID=-1
 # Launch singularitys
 def Run_singularitys():
+    global JobID
     stateVM=True
     # Slurm config
     stateVM=stateVM and (sed_slurm("s&NUM=NUM_DOCKERS&NUM="+str(NUM_DOCKERS)+"&") == 0)
@@ -232,7 +236,7 @@ def Run_singularitys():
     COMMAND="bash -c \"squeue -j "+JobID+" > "+os.path.join(JOBPath,"output_squeue")+" 2>&1 \"" 
     logging.warning("\nCommand squeue : "+COMMAND)
     # time wait for scheduling
-    twait=4
+    twait=2
     # max time wait in seconds
     mwait=600
     # iter
@@ -265,7 +269,7 @@ def Run_singularitys():
                     ore_squeue=squeue_re.search(lastline)
                     print(str(ore_squeue.groups()))
                     State=ore_squeue.group("state")
-                    print("State : "+State)
+                    logging.warning("State queue Running detected : "+State)
                     if (State == 'R'):
                         notstarted=False
             sys.stdout.flush()
@@ -311,6 +315,107 @@ except:
     traceback.print_exc(file=sys.stdout)
     kill_all_containers()
 
+
+# Launch singularity tunnels
+def launch_tunnel():
+    global TilesScriptsPath
+    logging.warning("Singularity TilesScriptsPath : %s" % (TilesScriptsPath))
+    logging.warning("Frontend Home in anatomist_job: "+HomeFront)
+    stateVM=True
+    
+    # Share ssh connection keys whith tiles
+    # TODO : secure that action ?
+    totbyte=0
+    filesize=os.path.getsize(sshKeyPath)
+    connectionkey=os.path.join(HomeFront,".ssh/id_rsa_connection")
+    os.system("cp "+sshKeyPath+".pub "+os.path.join(Home,".ssh/authorized_keys"))
+    packet_id_length=MSGsize-200
+    with open(sshKeyPath,'rb') as privatek:
+        l = '\\\"'+str(privatek.read(packet_id_length).replace(b"\n",b""),"utf-8")+'\\\"'
+        COMMANDid=LaunchTS+' bash -c "echo '+l+' > '+connectionkey+'; chmod 600 '+connectionkey+'"'
+        logging.warning("Send id_rsa with \"%s\"." % (COMMANDid) )
+        client.send_server(COMMANDid)
+        state=client.get_OK()
+        stateVM=stateVM and (state == 0)
+        while (l):
+            totbyte=totbyte+packet_id_length
+            rest=filesize-totbyte;
+            if (rest > packet_id_length ):
+                l = '\\\"'+str(privatek.read(packet_id_length).replace(b"\n",b""),"utf-8")+'\\\"'
+                COMMANDid=LaunchTS+' bash -c "echo '+l+' >> '+connectionkey+'"'
+                logging.warning("Send id_rsa with %s." % (COMMANDid) )
+                client.send_server(COMMANDid)
+                state=client.get_OK()
+                stateVM=stateVM and (state == 0)
+            else:
+                if (rest > 0):
+                    l = '\\\"'+str(privatek.read(rest).replace(b"\n",b""),"utf-8")+'\\\"'
+                    COMMANDid=LaunchTS+' bash -c "echo '+l+' >> '+connectionkey+'"'
+                    logging.warning("Send id_rsa with %s." % (COMMANDid) )
+                    client.send_server(COMMANDid)
+                    state=client.get_OK()
+                    stateVM=stateVM and (state == 0)
+                break
+    logging.warning("Out of id_rsa : "+ str(stateVM))
+    COMMANDid=LaunchTS+' bash -c "sed -e \\\"s&KEY-----&KEY-----\\\\n&\\\" -e \\\"s&-----END&\\\\n-----END&\\\" -i '+connectionkey+'"'
+    logging.warning("Send id_rsa with %s." % (COMMANDid) )
+    client.send_server(COMMANDid)
+    state=client.get_OK()
+    stateVM=stateVM and (state == 0)
+    with open(sshKeyPath+'.pub','rb') as publick:
+        l = '\\\"'+str(publick.read().replace(b"\n",b""),"utf-8")+'\\\"'
+        COMMANDid=LaunchTS+' bash -c "echo '+l+' > '+connectionkey+'.pub"'
+        logging.warning("Send id_rsa.pub with %s." % (COMMANDid) )
+        client.send_server(COMMANDid)
+        state=client.get_OK()
+        stateVM=stateVM and (state == 0)
+    logging.warning("Out of id_rsa.pub : "+ str(stateVM))
+    if (not stateVM):
+        logging.error("!! Error send id_rsa.!!")
+        return stateVM
+
+    with open("listPortsTiles.pickle", 'rb') as file_pi:
+        listPortsTilesIE=pickle.load(file_pi)
+    # Call tunnel for VNC
+    for i in range(NUM_DOCKERS):
+        i0="%0.3d" % (i+1)
+        TILEi=ExecuteTS+' Tiles=('+containerId(i+1)+') '
+        internPort=listPortsTilesIE[str(i)][0]
+        WebServerHost=listPortsTilesIE["TiledVizHost"]
+        ServerTSPortSSH=listPortsTilesIE["TiledVizConnectionPort"]
+        COMMANDi=' ssh-agent '+TilesScriptsPath+'/tunnel_ssh '+SSH_FRONTEND+' '+SSH_LOGIN+' '+str(internPort)+' '+WebServerHost+' '+str(ServerTSPortSSH)+' -i '+connectionkey
+        #COMMANDi=' '+TilesScriptsPath+'/tunnel_ssh '+SSH_FRONTEND+' '+SSH_LOGIN+' '+str(internPort)+' '+WebServerHost+' '+str(ServerTSPortSSH)+' -i '+connectionkey
+        logging.warning("%s | %s" % (TILEi, COMMANDi)) 
+        client.send_server(TILEi+COMMANDi)
+        state=client.get_OK()
+        stateVM=(state == 0)
+    if (not stateVM):
+        print("!! Error launch_tunnel.!!")
+        return stateVM
+    sys.stdout.flush()
+    
+    # Update nodes.json locally
+    JsonFile="nodes.json_init"
+    logging.error("Before read  : "+ str(JsonFile))
+    with open(JsonFile) as json_tiles_file:
+        nodes_json=json.loads(json_tiles_file.read())
+    for tilei in range(NUM_DOCKERS):
+        nodeurl=nodes_json["nodes"][tilei]["url"]
+        nodeurl=re.sub(r'https://[^/]*',r'https://'+listPortsTilesIE["TiledVizHost"],nodeurl)
+        nodeurl=re.sub(r'host=[^&]*',r'host='+listPortsTilesIE["TiledVizHost"],nodeurl)
+        oldport=int(re.sub(r'.*port=([^&]*)&.*',r'\1',nodeurl))
+        tileip=oldport % 1000 - 1
+        logging.warning("tile %d update nodes.json : new url %s with old port %d" % (tilei, nodeurl, oldport)) 
+        if ( str(tileip) in listPortsTilesIE):
+            extern=listPortsTilesIE[str(tileip)][1]
+            nodes_json["nodes"][tilei]["url"]=re.sub(r'port=[^&]*',r'port='+str(extern),nodeurl)
+            logging.warning("tile %d : new url %s" % (tilei,nodes_json["nodes"][tilei]["url"])) 
+        sys.stdout.flush()
+    logging.error("Before write nodes.json")
+    with open("nodes.json",'w') as nodesf:
+        nodesf.write(json.dumps(nodes_json))
+    logging.warning("Out of tunnel_ssh : "+ str(stateVM))
+    return stateVM
 
 time.sleep(2)
 # Launch singularity tools
@@ -375,7 +480,7 @@ except:
 def Get_server_IP():
     global stateVM
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh')+
+                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh '+SSH_ENO)+
                        '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
     OutIP=client.get_OK()
@@ -542,16 +647,28 @@ def showGUI(tileNum=-1,tileId='001'):
     client.get_OK()
 
 def kill_all_containers():
-    stateVM=True
-    client.send_server(ExecuteTS+' killall -9 Xvfb')
-    state=client.get_OK()
-    print("Out of killall xvfb command : "+ str(state))
+    global JobID
     # Send a file-signal for the slurm job to end sleeping and finished
     COMMAND="bash -c \"touch "+os.path.join(JOBPath,"end_slurm_singularitys")+"'\"" #+\
     logging.warning("\nCommand end slurm_singularitys : \n"+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
-    state=client.get_OK()
-    logging.warning("Out of end slurm_singularity : "+ str(state))
+    #state=client.get_OK()
+    #logging.warning("Out of end slurm_singularity : "+ str(state))
+    time.sleep(20)
+
+    COMMANDStop="bash -c \"scancel "+str(JobID)+\
+             " > "+os.path.join(JOBPath,"output_submit")+" 2>&1 \"" 
+    logging.warning("\nCommand stop singularitys : "+COMMAND)
+    client.send_server(LaunchTS+' '+COMMAND)
+    #state=client.get_OK()
+    #logging.warning("Out of stop singularity : "+ str(state))
+    sys.stdout.flush()
+    #stateVM=stateVM and (state == 0)
+
+    # stateVM=True
+    # client.send_server(ExecuteTS+' killall -9 Xvfb')
+    # state=client.get_OK()
+    # print("Out of killall xvfb command : "+ str(state))
     # client.send_server(LaunchTS+" "+COMMANDStop)
     # state=client.get_OK()
     # print("Out of COMMANDStop : "+ str(state))
