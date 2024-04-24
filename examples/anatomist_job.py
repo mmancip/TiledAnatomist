@@ -34,6 +34,8 @@ SSH_FRONTEND=config['SITE']['SSH_FRONTEND']
 SSH_LOGIN=config['SITE']['SSH_LOGIN']
 SSH_IP=config['SITE']['SSH_IP']
 
+SSH_ENO=config['SITE']['SSH_ENO']
+
 SSL_PUBLIC=config['SITE']['SSL_PUBLIC']
 SSL_PRIVATE=config['SITE']['SSL_PRIVATE']
 
@@ -263,7 +265,7 @@ except:
 def Get_server_IP():
     global stateVM
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh')+
+                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh '+SSH_ENO)+
                        '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
     OutIP=client.get_OK()
