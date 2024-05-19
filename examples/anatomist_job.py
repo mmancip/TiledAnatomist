@@ -69,11 +69,11 @@ OPTIONS="".join(list(map( replaceconf,OPTIONS)))
 print("OPTIONS after replacement : "+OPTIONS)
 
 
-SBATCH_NTASKS=config['CASE']['SBATCH_NTASKS']               # Nombre de processus
 SBATCH_time=config['CASE']['SBATCH_time']                   # Temps souhaité pour la réservation
 SBATCH_cpus_per_task=config['CASE']['SBATCH_cpus_per_task'] # utilisez 10 coeurs pour obtenir 1/4 de la RAM CPU
 SBATCH_gpus=config['CASE']['SBATCH_gpus']
 SBATCH_exclusive=eval(config['CASE']['SBATCH_exclusive'])   # Attention utilise la totalité du noeud
+SBATCH_account=config['CASE']['SBATCH_account']         # Project account
 SBATCH_partition=config['CASE']['SBATCH_partition']         # Queue
 
 CONTAINERS_PER_GPU=config['CASE']['CONTAINERS_PER_GPU']
@@ -183,8 +183,9 @@ def Run_singularitys():
     global JobID
     stateVM=True
     # Slurm config
+    stateVM=stateVM and (sed_slurm("s&SBATCH --job-name=ssingularity&SBATCH --job-name="+CASE+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&NUM=NUM_DOCKERS&NUM="+str(NUM_DOCKERS)+"&") == 0)
-    stateVM=stateVM and (sed_slurm("s&ntasks=NTASKS&ntasks="+SBATCH_NTASKS+"&") == 0)
+    stateVM=stateVM and (sed_slurm("s&ntasks=NTASKS&ntasks="+SBATCH_gpus+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&SBATCH --time=TIME&SBATCH --time="+SBATCH_time+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&SBATCH --cpus-per-task=TASKS&SBATCH --cpus-per-task="+SBATCH_cpus_per_task+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&SBATCH --gres=gpu:GPUS&SBATCH --gres=gpu:"+SBATCH_gpus+"&") == 0)
@@ -195,6 +196,7 @@ def Run_singularitys():
     if (SBATCH_exclusive):
         STRING_EXCLUSIVE="s&##SBATCH --exclusive&#SBATCH --exclusive&"
         stateVM=stateVM and (sed_slurm(STRING_EXCLUSIVE) == 0)
+    stateVM=stateVM and (sed_slurm("s&SBATCH --account=ACCOUNT&SBATCH --account="+SBATCH_account+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&SBATCH --partition=PARTITION&SBATCH --partition="+SBATCH_partition+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&DATE=DATE&DATE="+DATE+"&") == 0)
     stateVM=stateVM and (sed_slurm("s&DIR=/dockerspace&DIR="+SPACE_DIR+"&") == 0)
@@ -292,8 +294,8 @@ def Run_singularitys():
     # Wait for start submission
     #time.sleep(Remain)
 
-    logging.warning("Job is running : wait 10s for singularity launched.")
-    time.sleep(10)
+    logging.warning("Job is running : wait 2mn for singularity launched.")
+    time.sleep(120)
 
     return stateVM
 
@@ -309,6 +311,13 @@ except:
 try:
     if (stateVM):
         build_nodes_file()
+        try:
+            while(os.path.getsize("nodes.json_init") < 50):
+                time.sleep(5)
+                logging.warning("nodes.json to small. Try another build.")
+                build_nodes_file()
+        except:
+            pass
     sys.stdout.flush()
 except:
     stateVM=False
@@ -317,7 +326,7 @@ except:
 
 
 # Launch singularity tunnels
-def launch_tunnel():
+def launch_tunnel_singularity():
     global TilesScriptsPath
     logging.warning("Singularity TilesScriptsPath : %s" % (TilesScriptsPath))
     logging.warning("Frontend Home in anatomist_job: "+HomeFront)
@@ -385,20 +394,28 @@ def launch_tunnel():
         ServerTSPortSSH=listPortsTilesIE["TiledVizConnectionPort"]
         COMMANDi=' ssh-agent '+TilesScriptsPath+'/tunnel_ssh '+SSH_FRONTEND+' '+SSH_LOGIN+' '+str(internPort)+' '+WebServerHost+' '+str(ServerTSPortSSH)+' -i '+connectionkey
         #COMMANDi=' '+TilesScriptsPath+'/tunnel_ssh '+SSH_FRONTEND+' '+SSH_LOGIN+' '+str(internPort)+' '+WebServerHost+' '+str(ServerTSPortSSH)+' -i '+connectionkey
-        logging.warning("%s | %s" % (TILEi, COMMANDi)) 
         client.send_server(TILEi+COMMANDi)
         state=client.get_OK()
+        logging.warning("%s | %s : %d" % (TILEi, COMMANDi,state)) 
         stateVM=(state == 0)
     if (not stateVM):
         print("!! Error launch_tunnel.!!")
         return stateVM
     sys.stdout.flush()
+    time.sleep(2)
     
     # Update nodes.json locally
     JsonFile="nodes.json_init"
-    logging.error("Before read  : "+ str(JsonFile))
-    with open(JsonFile) as json_tiles_file:
-        nodes_json=json.loads(json_tiles_file.read())
+    logging.warning("Before read  : "+ str(JsonFile))
+    try:
+        with open(JsonFile) as json_tiles_file:
+            nodes_json=json.loads(json_tiles_file.read())
+    except:
+        sys.stdout.flush()
+        traceback.print_exc(file=sys.stdout)
+        os.system('ls -la '+JsonFile)
+        kill_all_containers()
+        
     for tilei in range(NUM_DOCKERS):
         nodeurl=nodes_json["nodes"][tilei]["url"]
         nodeurl=re.sub(r'https://[^/]*',r'https://'+listPortsTilesIE["TiledVizHost"],nodeurl)
@@ -416,6 +433,8 @@ def launch_tunnel():
         nodesf.write(json.dumps(nodes_json))
     logging.warning("Out of tunnel_ssh : "+ str(stateVM))
     return stateVM
+
+launch_tunnel=launch_tunnel_singularity
 
 time.sleep(2)
 # Launch singularity tools
@@ -480,8 +499,9 @@ except:
 def Get_server_IP():
     global stateVM
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh '+SSH_ENO)+
-                       '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
+                       'bash -c "ip a >> out_get_ip 2>&1; ip -4 -o addr show '+SSH_ENO+'>> out_get_ip 2>&1; '+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh '+SSH_ENO)+
+                       ' >> out_get_ip 2>&1; ls -la $HOME/.vnc/myip >> out_get_ip 2>&1; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
+    #                  '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
     OutIP=client.get_OK()
     print("Out of get ip : "+ str(OutIP))
@@ -646,18 +666,18 @@ def showGUI(tileNum=-1,tileId='001'):
     client.send_server(ExecuteTS+TilesStr+COMMAND)
     client.get_OK()
 
+COMMANDStop="bash -c \"scancel "+str(JobID)+\
+             " > "+os.path.join(JOBPath,"output_submit")+" 2>&1 \"" 
 def kill_all_containers():
-    global JobID
+    global COMMANDStop
     # Send a file-signal for the slurm job to end sleeping and finished
-    COMMAND="bash -c \"touch "+os.path.join(JOBPath,"end_slurm_singularitys")+"'\"" #+\
+    COMMAND="touch "+os.path.join(JOBPath,"end_slurm_singularitys")
     logging.warning("\nCommand end slurm_singularitys : \n"+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
     #state=client.get_OK()
     #logging.warning("Out of end slurm_singularity : "+ str(state))
     time.sleep(20)
 
-    COMMANDStop="bash -c \"scancel "+str(JobID)+\
-             " > "+os.path.join(JOBPath,"output_submit")+" 2>&1 \"" 
     logging.warning("\nCommand stop singularitys : "+COMMAND)
     client.send_server(LaunchTS+' '+COMMAND)
     #state=client.get_OK()
