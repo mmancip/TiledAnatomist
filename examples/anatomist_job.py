@@ -74,8 +74,9 @@ else:
 NumMaxClient=NUM_ANA-1
 
 CreateTS='create TS='+TileSet+' Nb='+str(NUM_DOCKERS)
-
 client.send_server(CreateTS)
+
+COMMANDStop="echo 'JobID is not defined.'"
 
 # Global commands
 # Execute on each/a set of tiles
@@ -90,7 +91,7 @@ LaunchTS='launch TS='+TileSet+" "+JOBPath+' '
 #LaunchTSC='launch TS='+TileSet+" "+CASEdir+' '
 
 # get TiledAnatomist package from Github
-COMMAND_GIT="git clone https://github.com/mmancip/TiledAnatomist.git"
+COMMAND_GIT="git clone -q https://github.com/mmancip/TiledAnatomist.git"
 print("command_git : "+COMMAND_GIT)
 os.system(COMMAND_GIT)
 sys.stdout.flush()
@@ -109,7 +110,7 @@ try:
     send_file_server(client,TileSet,".", SITE_config, JOBPath)
     SITE_config=os.path.join(JOBPath,os.path.basename(SITE_config))
     send_file_server(client,TileSet,".", os.path.basename(CASE_DATA_CONFIG), JOBPath)
-    send_file_server(client,TileSet,".", "list_hostsgpu", JOBPath)
+    send_file_server(client,TileSet,".", GPU_FILE, JOBPath)
 
 except:
     print("Error sending files !")
@@ -154,6 +155,23 @@ COMMANDStop=os.path.join(TILESINGULARITYS_DIR,"stop_singularitys")+" "+REF_CAS+"
 print("\n"+COMMANDStop)
 sys.stdout.flush()
 
+
+def kill_all_containers():
+    global COMMANDStop
+    logging.error("In Kill_all_containers. Launch : "+COMMANDStop)
+    stateVM=True
+    client.send_server(LaunchTS+" "+COMMANDStop)
+    # state=client.get_OK()
+    # print("Out of COMMANDStop : "+ str(state))
+    # stateVM=(state == 0)
+    time.sleep(10)
+    client.send_server(ExecuteTS+' bash -c "prep -f \" ssh.* '+HTTP_LOGIN+'@'+HTTP_FRONTEND+'\" |xargs kill "')
+    state=client.get_OK()
+    print("Out of killall ssh FRONTEND command : "+ str(state))
+    stateVM=stateVM and (state == 0)
+    Remove_TileSet()
+    return stateVM
+
 # Launch singularitys
 def Run_singularitys():
     COMMAND="bash -c \""+os.path.join(TILESINGULARITYS_DIR,"launch_singularitys")+" "+REF_CAS+" "+GPU_FILE+" "+SSH_FRONTEND+":"+SSH_IP+" "+TILEDVIZ_DIR+" "+TILESINGULARITYS_DIR+\
@@ -176,7 +194,9 @@ except:
     traceback.print_exc(file=sys.stdout)
     kill_all_containers()
 
-# Launch nodes.json file
+#COMMANDStop=""
+
+    # Launch nodes.json file
 def launch_nodes_json():
     if (os.path.exists("nodes.json")):
         logging.error("Found old nodes.json")
@@ -184,28 +204,116 @@ def launch_nodes_json():
         os.system('bash -c "mv nodes.json nodes.json_$(date +%F_%H-%M-%S)"')
     out_get=get_file_client(client,TileSet,JOBPath,"nodes.json",".")
     logging.warning("out of get_file nodes.json size : "+str(out_get))
-    while( out_get < 0):
+    iter=0
+    while( out_get <= 0 ):
         time.sleep(2)
         out_get=get_file_client(client,TileSet,JOBPath,"nodes.json",".")
-        logging.warning("out of get_file nodes.json : "+str(out_get))
+        logging.warning("out of get_file "+str(iter)+" nodes.json : "+str(out_get))
+        iter=iter+1
+        if (iter > 10):
+            logging.error("Something go wrong with nodes.json. We quit.")
+            kill_all_containers()
+            break
         pass
     #os.system('rm -f ./nodes.json')
     return True
     
+
+# Get password file with right number of lines (NUM_DOCKERS)
+out_get=0
+try:
+    out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+    logging.warning("out get list_dockers_pass : "+str(out_get))
+except:
+    pass
+try:    
+    count=0
+    while( int(out_get) <= 0):
+        time.sleep(10)
+        os.system('mv list_dockers_pass list_dockers_pass_')
+        out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+        logging.warning("out get list_dockers_pass : "+str(out_get))
+        count=count+1
+        if (count > 10):
+            logging.error("list_dockers_pass never created. Job stopped.")
+            kill_all_containers()
+            sys.exit(0)
+except:
+    pass
+
+size=0
+try:    
+    with open('list_dockers_pass') as f:
+        size=len([0 for _ in f])
+except:
+    pass
+
+while(size != NUM_DOCKERS):
+    time.sleep(10)
+    os.system('mv list_dockers_pass list_dockers_pass_')
+    try:    
+        out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+    except:
+        pass
+    try:    
+        with open('list_dockers_pass') as f:
+            size=len([0 for _ in f])
+    except:
+        pass
+    
+logging.warning("list_dockers_pass OK %d %d" % (size,NUM_DOCKERS))
+
+        
 try:
     if (stateVM):
-        build_nodes_file()
+        stateVM=build_nodes_file()
+        if (not stateVM):
+            logging.error("Something has gone wrong with build_nodes_file.")
+            kill_all_containers()
+            
+        try:
+            while(os.path.getsize("nodes.json_init") < 50):
+                time.sleep(5)
+                logging.warning("nodes.json_init to small. Try another build.")
+                stateVM=build_nodes_file()
+                if (not stateVM):
+                    logging.error("Something has gone wrong with build_nodes_file.")
+                    kill_all_containers()
+        except:
+            pass
     sys.stdout.flush()
 except:
     stateVM=False
     traceback.print_exc(file=sys.stdout)
     kill_all_containers()
+logging.warning("after build_nodes_json %r" % (stateVM))
 
+
+try:
+    if (stateVM):
+        nodes_json_init()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+logging.warning("after nodes_json_init %r" % (stateVM))
+    
+share_ssh_key=share_ssh_key_singularity
+
+try:
+    if (stateVM):
+        stateVM=share_ssh_key()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+logging.warning("after share ssh keys %r" % (stateVM))
+
+launch_tunnel=launch_tunnel_singularity
 
 time.sleep(2)
-# Launch singularity tools
-if (stateVM):
-    all_resize("1920x1080")
 
 logging.warning("Before launch_tunnel.")
 
@@ -359,7 +467,7 @@ def Run_dispatcher():
                        os.path.join(JOBPath,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
+    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 > $HOME/.vnc/out_dispatcher_$$" &')
     print("Out of anatomist_dispatcher : "+str(client.get_OK()))
 
 try:
@@ -430,20 +538,6 @@ def showGUI(tileNum=-1,tileId='001'):
         TilesStr=' Tiles=('+tileId+') '
     client.send_server(ExecuteTS+TilesStr+COMMAND)
     client.get_OK()
-
-def kill_all_containers():
-    stateVM=True
-    client.send_server(LaunchTS+" "+COMMANDStop)
-    # state=client.get_OK()
-    # print("Out of COMMANDStop : "+ str(state))
-    # stateVM=(state == 0)
-    time.sleep(10)
-    # client.send_server(ExecuteTS+' killall -9 Xvfb')
-    # state=client.get_OK()
-    # print("Out of killall Xvfb command : "+ str(state))
-    # stateVM=stateVM and (state == 0)
-    Remove_TileSet()
-    return stateVM
          
 
 #isActions=True
