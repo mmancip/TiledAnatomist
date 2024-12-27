@@ -28,14 +28,16 @@ DOCKERSPACE_DIR=config['SITE']['DOCKERSPACE_DIR']
 #NOVNC_URL=config['SITE']['NOVNC_URL']
 GPU_FILE=config['SITE']['GPU_FILE']
 
-HTTP_FRONTEND=config['SITE']['HTTP_FRONTEND']
-HTTP_LOGIN=config['SITE']['HTTP_LOGIN']
-HTTP_IP=config['SITE']['HTTP_IP']
+SSH_FRONTEND=config['SITE']['SSH_FRONTEND']
+SSH_LOGIN=config['SITE']['SSH_LOGIN']
+SSH_IP=config['SITE']['SSH_IP']
 init_IP=config['SITE']['init_IP']
 
 config.read(CASE_config)
 
 CASE=config['CASE']['CASE_NAME']
+App="OpenGL Display"
+
 NUM_DOCKERS=int(config['CASE']['NUM_DOCKERS'])
 
 CASE_DOCKER_PATH=config['CASE']['CASE_DOCKER_PATH']
@@ -61,15 +63,10 @@ CONTAINER_ANA_DISPATCHER=config['CASE']['CONTAINER_ANA_DISPATCHER']
 
 OPTIONS=config['CASE']['OPTIONS'].replace("$","").replace('"','')
 print("\nOPTIONS from CASE_CONFIG : "+OPTIONS)
-def replaceconf(x):
-    if (re.search('}',x)):
-        varname=x.replace("{","").replace("}","")
-        return config['CASE'][varname]
-    else:
-        return x
 OPTIONS=OPTIONS.replace("JOBPath",JOBPath)
 OPTIONS=OPTIONS.replace('{','|{').replace('}','}|').split('|')
 OPTIONS="".join(list(map( replaceconf,OPTIONS)))
+print("OPTIONS after replacement : "+OPTIONS)
 
 if HAVE_ATLAS:
     NUM_ANA=NUM_DOCKERS-1
@@ -81,6 +78,7 @@ CreateTS='create TS='+TileSet+' Nb='+str(NUM_DOCKERS)
 
 client.send_server(CreateTS)
 
+COMMANDStop="echo 'JobID is not defined.'"
 
 # Global commands
 # Execute on each/a set of tiles
@@ -95,7 +93,7 @@ LaunchTS='launch TS='+TileSet+" "+JOBPath+' '
 #LaunchTSC='launch TS='+TileSet+" "+CASEdir+' '
 
 # get TiledAnatomist package from Github
-COMMAND_GIT="git clone https://github.com/mmancip/TiledAnatomist.git"
+COMMAND_GIT="git clone -q https://github.com/mmancip/TiledAnatomist.git"
 print("command_git : "+COMMAND_GIT)
 os.system(COMMAND_GIT)
 
@@ -103,13 +101,13 @@ os.system(COMMAND_GIT)
 try:
     client.send_server(LaunchTS+' chmod og-rxw '+JOBPath)
     print("Out of chmod JOBPath : "+ str(client.get_OK()))
-
+    
     send_file_server(client,TileSet,".", CASE_config, JOBPath)
     CASE_config=os.path.join(JOBPath,CASE_config)
     send_file_server(client,TileSet,".", SITE_config, JOBPath)
     SITE_config=os.path.join(JOBPath,os.path.basename(SITE_config))
     send_file_server(client,TileSet,".", os.path.basename(CASE_DATA_CONFIG), JOBPath)
-    send_file_server(client,TileSet,".", "list_hostsgpu", JOBPath)
+    send_file_server(client,TileSet,".", GPU_FILE, JOBPath)
 
 except:
     print("Error sending files !")
@@ -135,7 +133,7 @@ COMMAND_copy=LaunchTS+" cp -rp TiledAnatomist/anatomist_server "+\
                "./"
 
 client.send_server(COMMAND_copy)
-print("Out of copy scripts from TiledCourse : "+ str(client.get_OK()))
+print("Out of copy scripts from TiledAnatomist : "+ str(client.get_OK()))
 
 # Launch containers HERE
 REF_CAS=str(NUM_DOCKERS)+" "+DATE+" "+DOCKERSPACE_DIR+" "+DOCKER_NAME
@@ -146,87 +144,162 @@ COMMANDStop=os.path.join(TILEDOCKERS_path,"stop_dockers")+" "+REF_CAS+" "+os.pat
 print("\n"+COMMANDStop)
 sys.stdout.flush()
 
-# Launch dockers
-def Run_dockers():
-    COMMAND="bash -vx -c \""+os.path.join(TILEDOCKERS_path,"launch_dockers")+" "+REF_CAS+" "+GPU_FILE+" "+HTTP_FRONTEND+":"+HTTP_IP+\
-             " "+network+" "+nethost+" "+domain+" "+init_IP+" TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
-             " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
-
-    print("\nCommand dockers : "+COMMAND)
-
-    client.send_server(LaunchTS+' '+COMMAND)
-    print("Out of launch dockers : "+ str(client.get_OK()))
+try:
+    stateVM=Run_dockers()
     sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
 
-Run_dockers()
-sys.stdout.flush()
 
-# Build nodes.json file from new dockers list
-def build_nodes_file():
-    print("Build nodes.json file from new dockers list.")
-    # COMMAND=LaunchTS+' chmod u+x build_nodes_file '
-    # client.send_server(COMMAND)
-    # print("Out of chmod build_nodes_file : "+ str(client.get_OK()))
+# Get password file with right number of lines (NUM_DOCKERS)
+out_get=0
+try:
+    out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+    logging.warning("out get list_dockers_pass : "+str(out_get))
+except:
+    pass
+try:    
+    count=0
+    while( int(out_get) <= 0):
+        time.sleep(10)
+        os.system('mv list_dockers_pass list_dockers_pass_')
+        out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+        logging.warning("out get list_dockers_pass : "+str(out_get))
+        count=count+1
+        if (count > 10):
+            logging.error("Error create list_dockers_pass. Job stopped.")
+            kill_all_containers()
+            sys.exit(0)
+except:
+    pass
 
-    COMMAND=LaunchTS+' ./build_nodes_file '+os.path.join(JOBPath,CASE_config)+' '+os.path.join(JOBPath,SITE_config)+' '+TileSet
-    print("\nCommand dockers : "+COMMAND)
+size=0
+try:    
+    with open('list_dockers_pass') as f:
+        size=len([0 for _ in f])
+except:
+    pass
 
-    client.send_server(COMMAND)
-    print("Out of build_nodes_file : "+ str(client.get_OK()))
-    time.sleep(2)
-
-build_nodes_file()
-sys.stdout.flush()
-#get_file_client(client,TileSet,JOBPath,"nodes.json",".")
+while(size != NUM_DOCKERS):
+    time.sleep(10)
+    os.system('mv list_dockers_pass list_dockers_pass_')
+    try:    
+        out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
+    except:
+        pass
+    try:    
+        with open('list_dockers_pass') as f:
+            size=len([0 for _ in f])
+    except:
+        pass
     
+logging.warning("list_dockers_pass OK %d %d" % (size,NUM_DOCKERS))
+
+
+try:
+    if (stateVM):
+        build_nodes_file()
+        
+        while(os.path.getsize("nodes.json_init") < 50):
+            time.sleep(5)
+            logging.warning("nodes.json_init to small. Try another build.")
+            build_nodes_file()
+            if (os.path.getsize("nodes.json_init") < 50):
+                logging.error("Something has gone wrong with build_nodes_file 2.")
+                kill_all_containers()
+            else:
+                break
+
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+logging.warning("after build_nodes_json %r" % (stateVM))
+#get_file_client(client,TileSet,JOBPath,"nodes.json",".")
+
+try:
+    if (stateVM):
+        nodes_json_init()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+logging.warning("after nodes_json_init %r" % (stateVM))
+
+try:
+    if (stateVM):
+        stateVM=share_ssh_key()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    kill_all_containers()
+logging.warning("after share ssh keys %r" % (stateVM))
+
+time.sleep(2)
+
+logging.warning("Before launch_tunnel.")
+
+try:
+    if (stateVM):
+        stateVM=launch_tunnel()
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    #kill_all_containers()
+print("after launch tunnel servers %r" % (stateVM))
+
+try:
+    nodesf=open("nodes.json",'r')
+    nodes=json.load(nodesf)
+    nodesf.close()
+except:
+    print("nodes.json doesn't exists !")
+    print("ls -la")
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    #kill_all_containers()
+
+print("after read nodes.json %r" % (stateVM))
+
+try:
+    if (stateVM):
+        stateVM=launch_vnc()
+except:
+    print("Problem when launch vnc !")
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
+    #kill_all_containers()
+
+print("after launch vnc servers %r" % (stateVM))
+
 time.sleep(2)
 # Launch docker tools
-def launch_resize(RESOL="1300x520"):
-    client.send_server(ExecuteTS+' xrandr --fb '+RESOL)
-    print("Out of xrandr : "+ str(client.get_OK()))
+if (stateVM):
+    all_resize("1300x520")
 
-launch_resize()
-
-def launch_tunnel():
-    # Call tunnel for VNC
-    client.send_server(ExecuteTS+' /opt/tunnel_ssh '+HTTP_FRONTEND+' '+HTTP_LOGIN)
-    print("Out of tunnel_ssh : "+ str(client.get_OK()))
-    # Get back PORT
-    for i in range(NUM_DOCKERS):
-        i0="%0.3d" % (i+1)
-        client.send_server(ExecuteTS+' Tiles=('+containerId(i+1)+') '+
-                           'bash -c "cat .vnc/port |xargs -I @ sed -e \"s#port='+SOCKETdomain+i0+'#port=@#\" -i CASE/nodes.json"')
-        print("Out of change port %s : " % (i0) + str(client.get_OK()))
-
-    time.sleep(2)
-    sys.stdout.flush()
-    launch_nodes_json()
-
-launch_tunnel()
-sys.stdout.flush()
-
-def launch_vnc():
-    client.send_server(ExecuteTS+' /opt/vnccommand')
-    print("Out of vnccommand : "+ str(client.get_OK()))
-
-launch_vnc()
-
-def init_wmctrl():
-    client.send_server(ExecuteTS+' wmctrl -l -G')
-    print("Out of wmctrl : "+ str(client.get_OK()))
-
-init_wmctrl()
-
-def Run_server():
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       CASE_DOCKER_PATH+'anatomist_server '+
-                       CONTAINER_PYTHON+' '+
-                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER)    
-    print("Out of anatomist_server : "+ str(client.get_OK()))
+reallaunch=True
+def Run_server(launch=False):
+    COMMAND_Server=ExecuteTS+' Tiles=('+containerId(1)+') '+\
+                       CASE_DOCKER_PATH+'anatomist_server '+\
+                       CONTAINER_PYTHON+' '+\
+                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER
+    print("COMMAND_Server: \n"+COMMAND_Server)
+    if (launch):
+        client.send_server(COMMAND_Server)    
+        print("Out of anatomist_server : "+ str(client.get_OK()))
+    else:
+        print("Run server : Run_server(True)")
         
-Run_server()
+Run_server(reallaunch)
 
 def Get_server_IP():
+    init_IP="0"
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
                        'bash -c "/usr/local/bin/get_ip.sh; cp .vnc/myip CASE/serverip"')
     #'scp .vnc/myip '+HTTP_LOGIN+'@'+HTTP_FRONTEND+':'+JOBPath+'"')
@@ -242,8 +315,8 @@ def Get_server_IP():
     except:
         print("Cannot retreive server ip.")        
         pass
-    return init_IP
     sys.stdout.flush()
+    return init_IP
 
 init_IP=Get_server_IP()
 
@@ -257,9 +330,9 @@ List_anatomist=range(2,NUM_ANA+1)
 #     CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
 #     domain+"."+init_IP)
 
-def Run_clients():
+def Run_clients(launch=False):
     # Split the list :
-    splv=10
+    splv=8
     for i in range(int(NUM_ANA/splv+1)):
         sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
         #print(str(sublist))
@@ -272,56 +345,68 @@ def Run_clients():
                        domain+"."+init_IP
         sys.stdout.flush()
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
-        client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
-        print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
+        if (launch):
+            client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
+            print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
-
-        # client.send_server(bExecuteTS+' '+
-        #     CASE_DOCKER_PATH+'anatomist_client '+
-        #     CONTAINER_PYTHON+' '+
-        #     CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
-        #     domain+"."+init_IP)
         
     if HAVE_ATLAS:
-        client.send_server(ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+
-                           CASE_DOCKER_PATH+'anatomist_client '+
-                           CONTAINER_PYTHON+' '+
-                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+
-                           domain+"."+init_IP+' true' )
-        print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
+        COMMAND_ATLAS=ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+\
+                           CASE_DOCKER_PATH+'anatomist_client '+\
+                           CONTAINER_PYTHON+' '+\
+                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+\
+                           domain+"."+init_IP+' true'
+        print("COMMAND_ATLAS : "+COMMAND_ATLAS)
+        if (launch):
+            client.send_server(COMMAND_ATLAS)
+            print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
+            
         sys.stdout.flush()
+    if (not launch):
+        print("Run clients : Run_clients(True)")
 
-Run_clients()
+try:
+    if (stateVM):
+        Run_clients(reallaunch)
+    sys.stdout.flush()
+except:
+    stateVM=False
+    traceback.print_exc(file=sys.stdout)
 
 
 # execute synchrone ?
-def Run_dispatcher():
+def Run_dispatcher(launch=False):
     COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
                     ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
                     ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
                     ' '+DATA_PATH_DOCKER
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
-    print("Out of anatomist_dispatcher : "+str(client.get_OK()))
+    if (launch):
+        client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
+        print("Out of anatomist_dispatcher : "+str(client.get_OK()))
+    else:
+        print("Run dispatcher : Run_dispatcher(True)")
 
-Run_dispatcher()
+Run_dispatcher(reallaunch)
 sys.stdout.flush()
 
+if (stateVM):
+    init_wmctrl()
 
-def clear_vnc(tileNum=-1,tileId='001'):
-    if ( tileNum > -1 ):
-        TilesStr=' Tiles=('+containerId(tileNum+1)+') '
-    else:
-        TilesStr=' Tiles=('+tileId+') '
-    client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
-    print("Out of clear-vnc : "+ str(client.get_OK()))
+# def clear_vnc(tileNum=-1,tileId='001'):
+#     if ( tileNum > -1 ):
+#         TilesStr=' Tiles=('+containerId(tileNum+1)+') '
+#     else:
+#         TilesStr=' Tiles=('+tileId+') '
+#     client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
+#     print("Out of clear-vnc : "+ str(client.get_OK()))
 
-def clear_vnc_all():
-    for i in List_anatomist:
-        clear_vnc(i-1)
-        #clear_vnc(tileId=containerId(i))
+try:
+    if (stateVM):
+        clear_vnc_all()
+except:
+    traceback.print_exc(file=sys.stdout)
 
-clear_vnc_all()
 
 def launch_changesize(RESOL="1920x1080",tileNum=-1,tileId='001'):
     if ( tileNum > -1 ):
@@ -360,14 +445,12 @@ def showGUI(tileNum=-1,tileId='001'):
     client.get_OK()
 
 
-def kill_all_containers():
-    client.send_server(ExecuteTS+' killall Xvnc')
-    print("Out of killall command : "+ str(client.get_OK()))
-    client.send_server(LaunchTS+" "+COMMANDStop)
-    client.close()
-    
-
 launch_actions_and_interact()
+
+try:
+    print("isActions: "+str(isActions))
+except:
+    print("isActions not defined.")
 
 kill_all_containers()
     
