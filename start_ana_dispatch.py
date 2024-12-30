@@ -27,6 +27,8 @@ parser.add_argument('-a', '--anadispatch',
                     help='ana_dispatcher.py program full path '
                     '(default: search in the PATH)')
 parser.add_argument('-c', '--config', help='data config file (json)')
+parser.add_argument('-i', '--index', action='append', default=[],
+                    help='index of target (default: 2, 3, ...)')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -38,6 +40,7 @@ subjects = args.subject
 #if len(subjects) == 0 and nbrain != 0:
     #nbrain -= 2
     #subjects = ['%03d' % (i + 1) for i in range(nbrain)]
+index = args.index
 
 ana_dispatcher = args.anadispatch
 if ana_dispatcher is None:
@@ -92,6 +95,11 @@ for i, data in enumerate(data_list):
         # skip non-selected subjects, still counting containers
         continue
 
+    if len(index)>0:
+        itarget=int(index[i])
+    else:
+        itarget=i+2
+        
     attribs = dict(common_attributes)
     attribs.update(data)
     sides = attribs.get('sides', ['R', 'L'])
@@ -112,28 +120,30 @@ for i, data in enumerate(data_list):
         subprocess.call([sys.executable, ana_dispatcher, '-m',
                          '<anatomist-%03d> '
                          'self.main.load_sulci_graph("%s", open_window=True, '
-                         'label="name")' % (i + 2, graph_file)])
+                         'label="name")' % (itarget, graph_file)])
         subprocess.call([sys.executable, ana_dispatcher, '-m',
                          '<anatomist-%03d> '
                          'self.main.load_wm_mesh("%s", '
-                         'win_num=%d)' % (i + 2, wm_mesh_file, sn)])
+                         'win_num=%d)' % (itarget, wm_mesh_file, sn)])
 
     # set subject name as window title so that we know who is who
     subprocess.call([sys.executable, ana_dispatcher, '-m',
                       '<anatomist-%03d> '
                       'self.main.block.internalWidget.widget.window()'
                       '.setWindowTitle("subject: %s")'
-                      % (i + 2, attribs['subject'])])
+                      % (itarget, attribs['subject'])])
 
 
-subprocess.call([sys.executable, ana_dispatcher, '-m',
+if len(index)==0:
+    subprocess.call([sys.executable, ana_dispatcher, '-m',
                  '<anatomist-atlas> self.main.load_model("", True)'])
 
 subprocess.call([sys.executable, ana_dispatcher, '-m',
                  'self.main.block.internalWidget.widget.window().'
                  'showMaximized()'])
 # set subnject name as window title so that we know who is who
-subprocess.call([sys.executable, ana_dispatcher, '-m',
+if len(index)==0:
+    subprocess.call([sys.executable, ana_dispatcher, '-m',
                   '<anatomist-atlas> '
                   'self.main.block.internalWidget.widget.window()'
                   '.setWindowTitle("atlas")'])
