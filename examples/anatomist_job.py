@@ -101,7 +101,7 @@ os.system(COMMAND_GIT)
 try:
     client.send_server(LaunchTS+' chmod og-rxw '+JOBPath)
     print("Out of chmod JOBPath : "+ str(client.get_OK()))
-    
+
     send_file_server(client,TileSet,".", CASE_config, JOBPath)
     CASE_config=os.path.join(JOBPath,CASE_config)
     send_file_server(client,TileSet,".", SITE_config, JOBPath)
@@ -160,7 +160,7 @@ try:
     logging.warning("out get list_dockers_pass : "+str(out_get))
 except:
     pass
-try:    
+try:
     count=0
     while( int(out_get) <= 0):
         time.sleep(10)
@@ -176,7 +176,7 @@ except:
     pass
 
 size=0
-try:    
+try:
     with open('list_dockers_pass') as f:
         size=len([0 for _ in f])
 except:
@@ -185,16 +185,16 @@ except:
 while(size != NUM_DOCKERS):
     time.sleep(10)
     os.system('mv list_dockers_pass list_dockers_pass_')
-    try:    
+    try:
         out_get=get_file_client(client,TileSet,JOBPath,"list_dockers_pass",".")
     except:
         pass
-    try:    
+    try:
         with open('list_dockers_pass') as f:
             size=len([0 for _ in f])
     except:
         pass
-    
+
 logging.warning("list_dockers_pass OK %d %d" % (size,NUM_DOCKERS))
 
 
@@ -291,7 +291,7 @@ def Run_server(launch=False):
                        CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER
     print("COMMAND_Server: \n"+COMMAND_Server)
     if (launch):
-        client.send_server(COMMAND_Server)    
+        client.send_server(COMMAND_Server)
         print("Out of anatomist_server : "+ str(client.get_OK()))
     else:
         print("Run server : Run_server(True)")
@@ -313,7 +313,7 @@ def Get_server_IP():
             init_IP=fserverip.read().replace(domain+'.',"").replace("\n","")
             print("Server ip : "+domain+'.'+init_IP)
     except:
-        print("Cannot retreive server ip.")        
+        print("Cannot retreive server ip.")
         pass
     sys.stdout.flush()
     return init_IP
@@ -321,8 +321,8 @@ def Get_server_IP():
 init_IP=Get_server_IP()
 
 List_anatomist=range(2,NUM_ANA+1)
-    
-# Give the anatomist_client command to the whole list : 
+
+# Give the anatomist_client command to the whole list :
 #   (obsolete : list(map(containerId, List_anatomist)) and too long list for message)
 # client.send_server(bExecuteTS+' Tiles='+str(List_anatomist)+' '+
 #     CASE_DOCKER_PATH+'anatomist_client '+
@@ -360,7 +360,7 @@ def Run_clients(launch=False):
         if (launch):
             client.send_server(COMMAND_ATLAS)
             print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
-            
+        
         sys.stdout.flush()
     if (not launch):
         print("Run clients : Run_clients(True)")
@@ -373,12 +373,13 @@ except:
     stateVM=False
     traceback.print_exc(file=sys.stdout)
 
+taglist=os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)
 
 # execute synchrone ?
 def Run_dispatcher(launch=False):
     COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
                     ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
-                    ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)+\
+                    ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+taglist+\
                     ' '+DATA_PATH_DOCKER
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
     if (launch):
@@ -389,6 +390,43 @@ def Run_dispatcher(launch=False):
 
 Run_dispatcher(reallaunch)
 sys.stdout.flush()
+
+NUM_DATA=NUM_DOCKERS-1
+jtaglist=json.load(open(CASE_DATA_CONFIG))
+
+def next_element(tileNum=-1):
+    global NUM_DATA
+    tileId=str(containerId(tileNum+1))
+    NUM_DATA=NUM_DATA+1
+    if (len(jtaglist["data_list"]) > NUM_DATA):
+        data=jtaglist["data_list"][NUM_DATA]
+
+        nodes["nodes"][tileNum]["title"]=data["subject"]
+        if ("variable" in nodes["nodes"][tileNum]):
+            nodes["nodes"][tileNum]["variable"]="ID-"+tileId+"_"+data["subject"]
+        nodes["nodes"][tileNum]["comment"]=str(data)
+        if ("usersNotes" in nodes["nodes"][tileNum]):
+            nodes["nodes"][tileNum]["usersNotes"]=str(data)
+        nodes["nodes"][tileNum]["tags"]=data["tags"]
+        
+        nodesf=open("nodes.json",'w')
+        nodesf.write(json.dumps(nodes))
+        nodesf.close()
+        
+        
+        COMMAND_NEXT='/opt/brainvisa/bin/python/start_ana_dispatcher.py -s '+str(data["subject"])+\
+                    ' -i '+str(tilenum)+\
+                    ' -a '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
+                    ' -d '+DATA_PATH_DOCKER
+        print("COMMAND_NEXT : "+COMMAND_NEXT)
+        
+        client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_NEXT+' </dev/null 2>&1 >.vnc/out_next_$$" &')
+        print("Out of anatomist_next : "+str(client.get_OK()))
+        
+        # CommandTSK=ExecuteTS+TilesStr+COMMANDKill
+        # client.send_server(CommandTSK)
+        # client.get_OK()
+
 
 if (stateVM):
     init_wmctrl()

@@ -1,7 +1,8 @@
-{"action1":["launch_smallsize","tab"],
- "action2":["launch_bigsize","picture_in_picture"],
- "action3":["fullscreenApp","all_out"],
- "action4":["showGUI","settings"],
- "action5":["clear_vnc","keyboard_hide"],
- "action6":["kill_all_containers","delete_forever"]
+{"action1":["kill_all_containers","delete_forever"],
+ "action2":["next_element","swap_horiz"], 
+ "action3":["launch_bigsize","picture_in_picture"],
+ "action4":["launch_smallsize","tab"],
+ "action5":["fullscreenApp","all_out"],
+ "action6":["showGUI","settings"],
+ "action7":["clear_vnc","keyboard_hide"],
 }
