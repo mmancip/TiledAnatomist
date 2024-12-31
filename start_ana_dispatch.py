@@ -29,6 +29,8 @@ parser.add_argument('-a', '--anadispatch',
 parser.add_argument('-c', '--config', help='data config file (json)')
 parser.add_argument('-i', '--index', action='append', default=[],
                     help='index of target (default: 2, 3, ...)')
+parser.add_argument('-g', '--graphversion', default=graph_version,
+                    help='datatabase graph version')
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -72,7 +74,7 @@ else:
         'center': center,
         'acquisition': acquisition,
         'analysis': analysis,
-        'graph_version': graph_version,
+        'graph_version': args.graphversion,
         'reco_session': reco_session,
         'meshtype': meshbrain,
         'sides': sides

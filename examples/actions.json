@@ -4,5 +4,5 @@
  "action4":["launch_smallsize","tab"],
  "action5":["fullscreenApp","all_out"],
  "action6":["showGUI","settings"],
- "action7":["clear_vnc","keyboard_hide"],
+ "action7":["clear_vnc","keyboard_hide"]
 }

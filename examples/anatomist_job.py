@@ -414,10 +414,11 @@ def next_element(tileNum=-1):
         nodesf.close()
         
         
-        COMMAND_NEXT='/opt/brainvisa/bin/python/start_ana_dispatcher.py -s '+str(data["subject"])+\
-                    ' -i '+str(tilenum)+\
+        COMMAND_NEXT='/opt/brainvisa/bin/python CASE/start_ana_dispatch.py -s '+str(data["subject"])+\
+                    ' -i '+str(tileNum+1)+\
                     ' -a '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
-                    ' -d '+DATA_PATH_DOCKER
+                    ' -d '+DATA_PATH_DOCKER+\
+                    ' -g 3.3'
         print("COMMAND_NEXT : "+COMMAND_NEXT)
         
         client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_NEXT+' </dev/null 2>&1 >.vnc/out_next_$$" &')
