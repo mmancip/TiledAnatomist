@@ -110,6 +110,11 @@ for i, data in enumerate(data_list):
     for sn, side in enumerate(sides):
         attribs['side'] = side
 
+        if len(index)>0:
+            win_num=sn+2
+        else:
+            win_num=sn
+
         graph_file = '%(database)s/%(center)s/%(subject)s/t1mri/%(acquisition)s/%(analysis)s/folds/%(graph_version)s/%(reco_session)s/%(side)s%(subject)s_%(reco_session)s.arg' \
             % attribs
         mesh_exts = ['.gii', '.mesh']
@@ -126,7 +131,7 @@ for i, data in enumerate(data_list):
         subprocess.call([sys.executable, ana_dispatcher, '-m',
                          '<anatomist-%03d> '
                          'self.main.load_wm_mesh("%s", '
-                         'win_num=%d)' % (itarget, wm_mesh_file, sn)])
+                         'win_num=%d)' % (itarget, wm_mesh_file, win_num])
 
     # set subject name as window title so that we know who is who
     subprocess.call([sys.executable, ana_dispatcher, '-m',

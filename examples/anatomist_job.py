@@ -397,6 +397,7 @@ jtaglist=json.load(open(CASE_DATA_CONFIG))
 def next_element(tileNum=-1):
     global NUM_DATA
     tileId=str(containerId(tileNum+1))
+    init_subject=nodes["nodes"][tileNum]["title"]
     NUM_DATA=NUM_DATA+1
     if (len(jtaglist["data_list"]) > NUM_DATA):
         data=jtaglist["data_list"][NUM_DATA]
@@ -413,6 +414,18 @@ def next_element(tileNum=-1):
         nodesf.write(json.dumps(nodes))
         nodesf.close()
         
+        # CommandTSK=ExecuteTS+TilesStr+COMMANDKill
+        # client.send_server(CommandTSK)
+        # client.get_OK()
+        
+        #self.main.load_sulci_graph("/braindatas/t1-1mm-1/057/t1mri/default_acquisition/default_analysis/folds/3.3/session1_manual/L057_session1_manual.arg", open_window=True, label="name")
+        #self.main.load_wm_mesh("/braindatas/t1-1mm-1/057/t1mri/default_acquisition/default_analysis/segmentation/mesh/057_Lwhite.gii", win_num=2)
+        
+        # COMMAND_CREATE2="/opt/brainvisa/bin/python CASE/ana_dispatcher.py -m '<anatomist-"+init_subject+"> self.main.createWindow(\"3D\")'"
+        # print("COMMAND_CREATE2 : "+COMMAND_CREATE2)
+        
+        # client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_CREATE2+' </dev/null 2>&1 >.vnc/out_create2_$$" &')
+        # print("Out of anatomist_create2 : "+str(client.get_OK()))
         
         COMMAND_NEXT='/opt/brainvisa/bin/python CASE/start_ana_dispatch.py -s '+str(data["subject"])+\
                     ' -i '+str(tileNum+1)+\
