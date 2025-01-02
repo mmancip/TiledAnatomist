@@ -131,7 +131,7 @@ for i, data in enumerate(data_list):
         subprocess.call([sys.executable, ana_dispatcher, '-m',
                          '<anatomist-%03d> '
                          'self.main.load_wm_mesh("%s", '
-                         'win_num=%d)' % (itarget, wm_mesh_file, win_num])
+                         'win_num=%d)' % (itarget, wm_mesh_file, win_num)])
 
     # set subject name as window title so that we know who is who
     subprocess.call([sys.executable, ana_dispatcher, '-m',
