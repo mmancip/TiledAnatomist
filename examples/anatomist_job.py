@@ -36,12 +36,11 @@ SSH_IP=config['SITE']['SSH_IP']
 
 SSH_ENO=config['SITE']['SSH_ENO']
 
-SSL_PUBLIC=config['SITE']['SSL_PUBLIC']
-SSL_PRIVATE=config['SITE']['SSL_PRIVATE']
-
 config.read(CASE_config)
 
 CASE=config['CASE']['CASE_NAME']
+App="OpenGL Display"
+
 NUM_DOCKERS=int(config['CASE']['NUM_DOCKERS'])
 
 OPTIONssh=config['CASE']['OPTIONssh']
@@ -156,36 +155,6 @@ print("\n"+COMMANDStop)
 sys.stdout.flush()
 
 
-def kill_all_containers():
-    global COMMANDStop
-    logging.error("In Kill_all_containers. Launch : "+COMMANDStop)
-    stateVM=True
-    client.send_server(LaunchTS+" "+COMMANDStop)
-    # state=client.get_OK()
-    # print("Out of COMMANDStop : "+ str(state))
-    # stateVM=(state == 0)
-    time.sleep(10)
-    client.send_server(ExecuteTS+' bash -c "prep -f \" ssh.* '+HTTP_LOGIN+'@'+HTTP_FRONTEND+'\" |xargs kill "')
-    state=client.get_OK()
-    print("Out of killall ssh FRONTEND command : "+ str(state))
-    stateVM=stateVM and (state == 0)
-    Remove_TileSet()
-    return stateVM
-
-# Launch singularitys
-def Run_singularitys():
-    COMMAND="bash -c \""+os.path.join(TILESINGULARITYS_DIR,"launch_singularitys")+" "+REF_CAS+" "+GPU_FILE+" "+SSH_FRONTEND+":"+SSH_IP+" "+TILEDVIZ_DIR+" "+TILESINGULARITYS_DIR+\
-             " TileSetPort "+UserFront+"@"+Frontend+" "+OPTIONS+\
-             " > "+os.path.join(JOBPath,"output_launch")+" 2>&1 \"" 
-
-    logging.warning("\nCommand singularitys : "+COMMAND)
-    client.send_server(LaunchTS+' '+COMMAND)
-    state=client.get_OK()
-    logging.warning("Out of launch singularity : "+ str(state))
-    sys.stdout.flush()
-    stateVM=(state == 0)
-    return stateVM
-
 try:
     stateVM=Run_singularitys()
     sys.stdout.flush()
@@ -196,7 +165,7 @@ except:
 
 #COMMANDStop=""
 
-    # Launch nodes.json file
+# Launch nodes.json file
 def launch_nodes_json():
     if (os.path.exists("nodes.json")):
         logging.error("Found old nodes.json")
@@ -275,8 +244,8 @@ try:
             while(os.path.getsize("nodes.json_init") < 50):
                 time.sleep(5)
                 logging.warning("nodes.json_init to small. Try another build.")
-                stateVM=build_nodes_file()
-                if (not stateVM):
+                build_nodes_file()
+                if (os.path.getsize("nodes.json_init") < 50):
                     logging.error("Something has gone wrong with build_nodes_file.")
                     kill_all_containers()
         except:
@@ -350,21 +319,27 @@ except:
 
 print("after launch vnc servers %r" % (stateVM))
 
+time.sleep(2)
+# Launch docker tools
+if (stateVM):
+    all_resize("1300x520")
 
-def Run_server():
-    COMMANDserver=os.path.join(JOBPath,'anatomist_server')+' '+\
+reallaunch=True
+def Run_server(launch=False):
+    COMMAND_Server=ExecuteTS+' Tiles=('+containerId(1)+') '+\
+                       CASE_DOCKER_PATH+'anatomist_server '+\
                        CONTAINER_PYTHON+' '+\
-                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
-                       CONTAINER_ANA_LIB
-    print("COMMAND server |%s|" % (COMMANDserver))
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
-                       COMMANDserver)
+                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER
+    print("COMMAND_Server: \n"+COMMAND_Server)
+    if (launch):
+        client.send_server(COMMAND_Server)
     print("Out of anatomist_server : "+ str(client.get_OK()))
-    sys.stdout.flush()
+    else:
+        print("Run server : Run_server(True)")
 
 try:
     if (stateVM):
-        Run_server()
+        Run_server(reallaunch)
     sys.stdout.flush()
 except:
     stateVM=False
@@ -372,6 +347,11 @@ except:
 
 def Get_server_IP():
     global stateVM
+
+
+
+def Get_server_IP():
+    init_IP="0"
     client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+
                        'bash -c "'+os.path.join(TILESINGULARITYS_DIR,'get_ip.sh '+SSH_ENO)+
                        '; cp $HOME/.vnc/myip '+os.path.join(JOBPath,'serverip')+'"')
@@ -397,7 +377,6 @@ def Get_server_IP():
         sys.stdout.flush()
         init_IP="1.1.1.1"
         stateVM=False
-        pass
     sys.stdout.flush()
     return init_IP
 
@@ -411,17 +390,17 @@ except:
     traceback.print_exc(file=sys.stdout)
 
 List_anatomist=range(2,NUM_ANA+1)
-    
 
-def Run_clients():
+
+def Run_clients(launch=False):
     # Split the list :
-    splv=10
-    # for i in range(int(NUM_ANA/splv+1)):
-        # sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
-        # #print(str(sublist))
-        # if (len(sublist) == 0):
-        #     break
-        # arglist=list(map(containerId, sublist))
+    splv=8
+    for i in range(int(NUM_ANA/splv+1)):
+        sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
+        #print(str(sublist))
+        if (len(sublist) == 0):
+            break
+        arglist=list(map(containerId, sublist))
         #print(str(arglist))
 
     for i in range(2,NUM_ANA+1):
@@ -430,53 +409,102 @@ def Run_clients():
                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                       CONTAINER_ANA_LIB+' '+init_IP
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
-        sys.stdout.flush()
-        # client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+COMMANDclient)
-        client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') bash -c "cd '+JOBPath+'; SINGULARITYID=%03d ' % (i)+COMMANDclient+'"')
-        #client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
-        print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
+
+        if (launch):
+            client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
+            print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
         
     if HAVE_ATLAS:
-        COMMANDclient=os.path.join(JOBPath,'anatomist_client')+' '+\
-                      CONTAINER_PYTHON+' '+\
-                      os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
-                      CONTAINER_ANA_LIB+' '+init_IP+' true'
-        print("Command %d of anatomist_client : %s " % (NUM_ANA+1,COMMANDclient))
+        COMMAND_ATLAS=ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+\
+                           CASE_DOCKER_PATH+'anatomist_client '+\
+                           CONTAINER_PYTHON+' '+\
+                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+\
+                           domain+"."+init_IP+' true'
+        print("COMMAND_ATLAS : "+COMMAND_ATLAS)
+        if (launch):
+            client.send_server(COMMAND_ATLAS)
+            print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
+        
         sys.stdout.flush()
-        client.send_server(ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+COMMANDclient)
-        print("Out atlas of anatomist_client : %s " % (str(client.get_OK())))
-        sys.stdout.flush()
+    if (not launch):
+        print("Run clients : Run_clients(True)")
 
 try:
     if (stateVM):
-        Run_clients()
+        Run_clients(reallaunch)
     sys.stdout.flush()
 except:
     stateVM=False
     traceback.print_exc(file=sys.stdout)
 
+taglist=os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)
 
 # execute synchrone ?
-def Run_dispatcher():
-    COMMAND_DISPATCHER=os.path.join(JOBPath,'anatomist_dispatcher')+' '+str(NUM_ANA)+' '+\
-                       CONTAINER_PYTHON+' '+\
-                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
-                       CONTAINER_ANA_LIB+' '+\
-                       os.path.join(JOBPath,START_ANA_DISPATCH)+' '+\
-                       os.path.join(JOBPath,CASE_DATA_CONFIG)+\
-                    ' '+DATA_PATH_SINGULARITY
+def Run_dispatcher(launch=False):
+    COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
+                    ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
+                    ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+taglist+\
+                    ' '+DATA_PATH_DOCKER
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
-    client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 > $HOME/.vnc/out_dispatcher_$$" &')
-    print("Out of anatomist_dispatcher : "+str(client.get_OK()))
+    if (launch):
+        client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
+        print("Out of anatomist_dispatcher : "+str(client.get_OK()))
+    else:
+        print("Run dispatcher : Run_dispatcher(True)")
 
-try:
-    if (stateVM):
-        Run_dispatcher()
-    sys.stdout.flush()
-except:
-    stateVM=False
-    traceback.print_exc(file=sys.stdout)
+Run_dispatcher(reallaunch)
+sys.stdout.flush()
+
+NUM_DATA=NUM_DOCKERS-1
+jtaglist=json.load(open(CASE_DATA_CONFIG))
+
+def next_element(tileNum=-1):
+    global NUM_DATA
+    tileId=str(containerId(tileNum+1))
+    init_subject=nodes["nodes"][tileNum]["title"]
+    NUM_DATA=NUM_DATA+1
+    if (len(jtaglist["data_list"]) > NUM_DATA):
+        data=jtaglist["data_list"][NUM_DATA]
+
+        nodes["nodes"][tileNum]["title"]=data["subject"]
+        if ("variable" in nodes["nodes"][tileNum]):
+            nodes["nodes"][tileNum]["variable"]="ID-"+tileId+"_"+data["subject"]
+        nodes["nodes"][tileNum]["comment"]=str(data)
+        if ("usersNotes" in nodes["nodes"][tileNum]):
+            nodes["nodes"][tileNum]["usersNotes"]=str(data)
+        nodes["nodes"][tileNum]["tags"]=data["tags"]
+        
+        nodesf=open("nodes.json",'w')
+        nodesf.write(json.dumps(nodes))
+        nodesf.close()
+        
+        # CommandTSK=ExecuteTS+TilesStr+COMMANDKill
+        # client.send_server(CommandTSK)
+        # client.get_OK()
+        
+        #self.main.load_sulci_graph("/braindatas/t1-1mm-1/057/t1mri/default_acquisition/default_analysis/folds/3.3/session1_manual/L057_session1_manual.arg", open_window=True, label="name")
+        #self.main.load_wm_mesh("/braindatas/t1-1mm-1/057/t1mri/default_acquisition/default_analysis/segmentation/mesh/057_Lwhite.gii", win_num=2)
+        
+        # COMMAND_CREATE2="/opt/brainvisa/bin/python CASE/ana_dispatcher.py -m '<anatomist-"+init_subject+"> self.main.createWindow(\"3D\")'"
+        # print("COMMAND_CREATE2 : "+COMMAND_CREATE2)
+        
+        # client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_CREATE2+' </dev/null 2>&1 >.vnc/out_create2_$$" &')
+        # print("Out of anatomist_create2 : "+str(client.get_OK()))
+        
+        COMMAND_NEXT='/opt/brainvisa/bin/python CASE/start_ana_dispatch.py -s '+str(data["subject"])+\
+                    ' -i '+str(tileNum+1)+\
+                    ' -a '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
+                    ' -d '+DATA_PATH_DOCKER+\
+                    ' -g 3.3'
+        print("COMMAND_NEXT : "+COMMAND_NEXT)
+        
+        client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_NEXT+' </dev/null 2>&1 >.vnc/out_next_$$" &')
+        print("Out of anatomist_next : "+str(client.get_OK()))
+        
+        # CommandTSK=ExecuteTS+TilesStr+COMMANDKill
+        # client.send_server(CommandTSK)
+        # client.get_OK()
 
 
 if (stateVM):
@@ -489,12 +517,6 @@ if (stateVM):
 #         TilesStr=' Tiles=('+tileId+') '
 #     client.send_server(ExecuteTS+TilesStr+' x11vnc -R clear-all')
 #     print("Out of clear-vnc : "+ str(client.get_OK()))
-
-# def clear_vnc_all():
-#     for i in List_anatomist:
-#         clear_vnc(i-1)
-#         #clear_vnc(tileId=containerId(i))
-
 
 try:
     if (stateVM):
@@ -540,18 +562,12 @@ def showGUI(tileNum=-1,tileId='001'):
     client.get_OK()
          
 
-#isActions=True
 launch_actions_and_interact()
 
 try:
     print("isActions: "+str(isActions))
 except:
     print("isActions not defined.")
-
-
-# COMMAND="rm -rf $HOME/.vnc"
-# client.send_server(ExecuteTS+COMMAND)
-# client.get_OK()
 
 kill_all_containers()
     
