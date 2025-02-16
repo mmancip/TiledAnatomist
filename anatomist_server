@@ -1,7 +1,7 @@
 #!/bin/bash
 . /etc/bash.bashrc;
 
-cd /home/myuser/CASE
+cd /tmp
 CONTAINER_PYTHON=${1:-/casa/install/bin/python}
 CONTAINER_ANA_DISPATCHER=${2:-/home/myuser/CASE/ana_dispatcher.py}
 CONTAINER_ANA_LIB=${3:-/casa/install}

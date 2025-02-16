@@ -235,8 +235,8 @@ logging.warning("list_dockers_pass OK %d %d" % (size,NUM_DOCKERS))
         
 try:
     if (stateVM):
-        stateVM=build_nodes_file()
-        if (not stateVM):
+        build_nodes_file()
+        if (os.path.getsize("nodes.json_init") < 50):
             logging.error("Something has gone wrong with build_nodes_file.")
             kill_all_containers()
             
@@ -246,7 +246,7 @@ try:
                 logging.warning("nodes.json_init to small. Try another build.")
                 build_nodes_file()
                 if (os.path.getsize("nodes.json_init") < 50):
-                    logging.error("Something has gone wrong with build_nodes_file.")
+                    logging.error("Something has gone wrong with build_nodes_file 2.")
                     kill_all_containers()
         except:
             pass
@@ -327,13 +327,13 @@ if (stateVM):
 reallaunch=True
 def Run_server(launch=False):
     COMMAND_Server=ExecuteTS+' Tiles=('+containerId(1)+') '+\
-                       CASE_DOCKER_PATH+'anatomist_server '+\
+                       os.path.join(JOBPath,'anatomist_server')+' '+\
                        CONTAINER_PYTHON+' '+\
-                       CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER
+                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)
     print("COMMAND_Server: \n"+COMMAND_Server)
     if (launch):
         client.send_server(COMMAND_Server)
-    print("Out of anatomist_server : "+ str(client.get_OK()))
+        print("Out of anatomist_server : "+ str(client.get_OK()))
     else:
         print("Run server : Run_server(True)")
 
@@ -402,9 +402,9 @@ def Run_clients(launch=False):
             break
         arglist=list(map(containerId, sublist))
         #print(str(arglist))
-
+    COMMANDDISPLAY="DISPLAY=:$(bash -c 'head -n 1 /tmp/out_xvfb_* |sed -e \"s&Xvfb :\\([0-9]*\\).*&\\1&\" ') "
     for i in range(2,NUM_ANA+1):
-        COMMANDclient=os.path.join(JOBPath,'anatomist_client')+' '+\
+        COMMANDclient=COMMANDDISPLAY+os.path.join(JOBPath,'anatomist_client')+' '+\
                       CONTAINER_PYTHON+' '+\
                       os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
                       CONTAINER_ANA_LIB+' '+init_IP
@@ -417,10 +417,10 @@ def Run_clients(launch=False):
         
     if HAVE_ATLAS:
         COMMAND_ATLAS=ExecuteTS+' Tiles=('+containerId(NUM_ANA+1)+') '+\
-                           CASE_DOCKER_PATH+'anatomist_client '+\
-                           CONTAINER_PYTHON+' '+\
-                           CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+' '+\
-                           domain+"."+init_IP+' true'
+                      COMMANDDISPLAY+os.path.join(JOBPath,'anatomist_client')+' '+\
+                      CONTAINER_PYTHON+' '+\
+                      os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+' '+\
+                      CONTAINER_ANA_LIB+"."+init_IP+' true'
         print("COMMAND_ATLAS : "+COMMAND_ATLAS)
         if (launch):
             client.send_server(COMMAND_ATLAS)
@@ -438,14 +438,14 @@ except:
     stateVM=False
     traceback.print_exc(file=sys.stdout)
 
-taglist=os.path.join(CASE_DOCKER_PATH,CASE_DATA_CONFIG)
+taglist=CASE_DATA_CONFIG
 
 # execute synchrone ?
 def Run_dispatcher(launch=False):
-    COMMAND_DISPATCHER=CASE_DOCKER_PATH+'anatomist_dispatcher '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
-                    ' '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
-                    ' '+CASE_DOCKER_PATH+START_ANA_DISPATCH+' '+taglist+\
-                    ' '+DATA_PATH_DOCKER
+    COMMAND_DISPATCHER= os.path.join(JOBPath,'anatomist_dispatcher')+' '+str(NUM_ANA)+' '+CONTAINER_PYTHON+\
+                    ' '+os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+\
+                    ' '+START_ANA_DISPATCH+' '+taglist+\
+                    ' '+DATA_PATH_SINGULARITY
     print("COMMAND_DISPATCHER : "+COMMAND_DISPATCHER)
     if (launch):
         client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_DISPATCHER+' </dev/null 2>&1 >.vnc/out_dispatcher_$$" &')
@@ -492,10 +492,10 @@ def next_element(tileNum=-1):
         # client.send_server(ExecuteTS+' Tiles=('+containerId(1)+') '+'nohup bash -c "'+COMMAND_CREATE2+' </dev/null 2>&1 >.vnc/out_create2_$$" &')
         # print("Out of anatomist_create2 : "+str(client.get_OK()))
         
-        COMMAND_NEXT='/opt/brainvisa/bin/python CASE/start_ana_dispatch.py -s '+str(data["subject"])+\
+        COMMAND_NEXT='/opt/brainvisa/bin/python '+os.path.join(JOBPath,'start_ana_dispatch.py')+' -s '+str(data["subject"])+\
                     ' -i '+str(tileNum+1)+\
-                    ' -a '+CASE_DOCKER_PATH+CONTAINER_ANA_DISPATCHER+\
-                    ' -d '+DATA_PATH_DOCKER+\
+                    ' -a '+os.path.join(JOBPath,CONTAINER_ANA_DISPATCHER)+\
+                    ' -d '+DATA_PATH_SINGULARITY+\
                     ' -g 3.3'
         print("COMMAND_NEXT : "+COMMAND_NEXT)
         
