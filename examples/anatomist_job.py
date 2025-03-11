@@ -402,7 +402,7 @@ def Run_clients(launch=False):
             break
         arglist=list(map(containerId, sublist))
         #print(str(arglist))
-    COMMANDDISPLAY="DISPLAY=:$(bash -c 'head -n 1 /tmp/out_xvfb_* |sed -e \"s&Xvfb :\\([0-9]*\\).*&\\1&\" ') "
+    COMMANDDISPLAY="XDG_RUNTIME_DIR=/tmp/runtime-$USER DISPLAY=:$(bash -c 'head -n 1 /tmp/out_xvfb_* |sed -e \"s&Xvfb :\\([0-9]*\\).*&\\1&\" ') "
     for i in range(2,NUM_ANA+1):
         COMMANDclient=COMMANDDISPLAY+os.path.join(JOBPath,'anatomist_client')+' '+\
                       CONTAINER_PYTHON+' '+\

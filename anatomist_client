@@ -10,7 +10,7 @@ MASTERIP=${4:-11.0.0.11}
 IS_ATLAS=${5:-false}
 
 echo ${SINGULARITYID}; #export DISPLAY=:1;
-export DISPLAY=$(pgrep -fa Xvfb | sed -e "s&.*:\([0-9]*\) .*&:\1&")
+echo DISPLAY=$DISPLAY
 if ( ! ${IS_ATLAS} ); then
     OUT=$HOME/.vnc/out_ana
     COMMAND="PYTHONPATH=${CONTAINER_ANA_LIB}/python LD_LIBRARY_PATH=${CONTAINER_ANA_LIB}/lib:${LD_LIBRARY_PATH} ${CONTAINER_PYTHON} -- ${CONTAINER_ANA_DISPATCHER} --id anatomist-${SINGULARITYID} --url ${MASTERIP}"
