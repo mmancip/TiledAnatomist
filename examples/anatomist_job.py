@@ -394,14 +394,14 @@ List_anatomist=range(2,NUM_ANA+1)
 
 def Run_clients(launch=False):
     # Split the list :
-    splv=8
-    for i in range(int(NUM_ANA/splv+1)):
-        sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
-        #print(str(sublist))
-        if (len(sublist) == 0):
-            break
-        arglist=list(map(containerId, sublist))
-        #print(str(arglist))
+    # splv=8
+    # for i in range(int(NUM_ANA/splv+1)):
+    #     sublist=list(map(List_anatomist.__getitem__, range(i*splv,min((i+1)*splv,NumMaxClient))))
+    #     #print(str(sublist))
+    #     if (len(sublist) == 0):
+    #         break
+    #     arglist=list(map(containerId, sublist))
+    #     #print(str(arglist))
     COMMANDDISPLAY="XDG_RUNTIME_DIR=/tmp/runtime-$USER DISPLAY=:$(bash -c 'head -n 1 /tmp/out_xvfb_* |sed -e \"s&Xvfb :\\([0-9]*\\).*&\\1&\" ') "
     for i in range(2,NUM_ANA+1):
         COMMANDclient=COMMANDDISPLAY+os.path.join(JOBPath,'anatomist_client')+' '+\
@@ -411,7 +411,8 @@ def Run_clients(launch=False):
         print("Command %d of anatomist_client : %s " % (i,COMMANDclient))
 
         if (launch):
-            client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
+            #client.send_server(ExecuteTS+' Tiles='+str(arglist)+' '+COMMANDclient)
+            client.send_server(ExecuteTS+' Tiles=('+containerId(i)+') '+COMMANDclient)
             print("Out %d of anatomist_client : %s " % (i,str(client.get_OK())))
         sys.stdout.flush()
         
